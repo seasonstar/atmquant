@@ -1,0 +1,18 @@
+{
+    "ma_strategy": {
+        "name": "双均线策略",
+        "class_name": "MovingAverageStrategy",
+        "fast_period": 10,
+        "slow_period": 20,
+        "size": 1,
+        "enabled": true
+    },
+    "supertrend_strategy": {
+        "name": "SuperTrend策略",
+        "class_name": "SuperTrendStrategy",
+        "atr_period": 14,
+        "multiplier": 3.0,
+        "size": 1,
+        "enabled": false
+    }
+}

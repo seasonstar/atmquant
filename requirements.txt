@@ -1,0 +1,17 @@
+# vnpy核心依赖
+vnpy>=4.1.0
+
+# 数据处理
+numpy>=2.2.3
+pandas>=2.2.3
+ta-lib>=0.6.4
+
+# 界面和可视化
+PySide6==6.8.2.1
+pyqtgraph>=0.13.7
+plotly>=6.0.0
+
+# 工具库
+loguru>=0.7.3
+tqdm>=4.67.1
+python-dotenv>=1.0.0

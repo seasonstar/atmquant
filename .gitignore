@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+vnpy_env/
+env/
+ENV/
+
+# 配置文件
+.env
+config/*.json
+!config/*.json.example
+
+# 数据文件 (使用MySQL数据库，不需要本地数据目录)
+*.db
+*.sqlite
+*.csv
+*.h5
+*.hdf5
+
+# 日志文件
+logs/
+*.log
+
+# 回测结果
+backtests/results/
+backtests/reports/
+
+# IDE
+.vscode/
+.idea/
+.kiro/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
