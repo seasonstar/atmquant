@@ -19,6 +19,13 @@ def main():
     print("基于vnpy 4.1框架")
     print("=" * 60)
     
+    # 加载ATMQuant配置
+    try:
+        from config.settings import apply_settings
+        apply_settings()
+    except Exception as e:
+        print(f"⚠️  配置加载失败: {e}")
+    
     try:
         # 导入vnpy核心模块
         from vnpy.event import EventEngine
