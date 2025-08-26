@@ -49,11 +49,6 @@ vim .env
 python main.py
 ```
 
-
-# 运行主程序
-python main.py
-```
-
 ## 项目结构
 
 ```
@@ -79,6 +74,35 @@ atmquant/                          # 项目根目录
 ├── 📄 requirements.txt             # 依赖包
 └── 📄 README.md                    # 项目说明
 ```
+
+## 📚 系列文章
+
+1. **[以AI量化为生：普通人如何从无到有稳步构建交易系统](https://mp.weixin.qq.com/s/vHL2ZNoqe65dGn9qEQzLgQ)**
+   - 量化交易入门指南
+   - 系统架构设计思路
+   - 学习路径规划
+
+2. **[以AI量化为生：2.手把手搭建专业量化开发环境](https://mp.weixin.qq.com/s/AFFntmIN6rAFmlk03aIzoA)**
+   - Python环境配置
+   - vnpy框架安装
+   - 开发工具设置
+
+3. **[以AI量化为生：3.vnpy插件安装与配置指南](https://mp.weixin.qq.com/s/0LQ0CLgvKuTMccVPP99WfQ)**
+   - vnpy插件生态介绍
+   - 核心插件安装配置
+   - 常见问题解决
+
+4. **[以AI量化为生：4.vnpy配置管理与系统集成](https://mp.weixin.qq.com/s/XjDe1nD1tDXyJwQweeGCSA)**
+   - 轻量级配置管理方案
+   - 数据库配置
+   - 数据源接入
+   - 邮件通知设置
+
+5. **[以AI量化为生：5.期货数据定时下载与合约管理](https://mp.weixin.qq.com/s/r6ravF0YqtbvLcnXToX1Ug)**
+   - 期货合约类型详解
+   - 智能合约管理系统
+   - 定时数据下载实现
+   - 数据质量监控
 
 ## 开发规范
 
