@@ -117,7 +117,7 @@ class CtaEngine(BaseEngine):
         self.event_engine.register(EVENT_ORDER, self.process_order_event)
         self.event_engine.register(EVENT_TRADE, self.process_trade_event)
 
-        log_engine: LogEngine = self.main_engine.get_engine("log")
+        log_engine: LogEngine = self.main_engine.get_engine("log")  # type: ignore
         log_engine.register_log(EVENT_CTA_LOG)
 
     def init_datafeed(self) -> None:
@@ -175,13 +175,13 @@ class CtaEngine(BaseEngine):
         if order.type == OrderType.STOP:
             so: StopOrder = StopOrder(
                 vt_symbol=order.vt_symbol,
-                direction=order.direction,
+                direction=order.direction,      # type: ignore
                 offset=order.offset,
                 price=order.price,
                 volume=order.volume,
                 stop_orderid=order.vt_orderid,
                 strategy_name=strategy.strategy_name,
-                datetime=order.datetime,
+                datetime=order.datetime,        # type: ignore
                 status=STOP_STATUS_MAP[order.status],
                 vt_orderids=[order.vt_orderid],
             )
@@ -248,6 +248,8 @@ class CtaEngine(BaseEngine):
                         price = tick.bid_price_5
 
                 contract: ContractData | None = self.main_engine.get_contract(stop_order.vt_symbol)
+                if not contract:
+                    continue
 
                 vt_orderids: list = self.send_limit_order(
                     strategy,
@@ -527,7 +529,7 @@ class CtaEngine(BaseEngine):
         contract: ContractData | None = self.main_engine.get_contract(strategy.vt_symbol)
 
         if contract:
-            return contract.pricetick       # type: ignore
+            return contract.pricetick
         else:
             return None
 
@@ -962,13 +964,13 @@ class CtaEngine(BaseEngine):
         event: Event = Event(type=EVENT_CTA_LOG, data=log)
         self.event_engine.put(event)
 
-    def send_email(self, msg: str, strategy: CtaTemplate | None = None) -> None:
+    def send_notification(self, msg: str, strategy: CtaTemplate | None = None) -> None:
         """
-        Send email to default receiver.
+        Send notification to default receiver.
         """
         if strategy:
             subject: str = f"{strategy.strategy_name}"
         else:
             subject = _("CTA策略引擎")
 
-        self.main_engine.send_email(subject, msg)
+        self.main_engine.send_notification(msg, subject)

@@ -164,7 +164,6 @@ class EnhancedChartWidget(ChartWidget):
                 self.candlestick_patterns.set_chart(self)
             except ImportError:
                 pass
-            self.candlestick_patterns.set_chart(self)
 
     def add_plot(self, plot_name: str, minimum_height: int = 80, maximum_height: int = None, hide_x_axis: bool = False) -> None:
         """重写add_plot使用ExtendableViewBox"""

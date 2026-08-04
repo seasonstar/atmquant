@@ -159,6 +159,34 @@ msgstr "Gateway not found: {}"
 msgid "找不到引擎：{}"
 msgstr "Engine not found: {}"
 
+#: vnpy\trader\engine.py:219
+msgid "连接登录：{}"
+msgstr "Connect gateway -> {}"
+
+#: vnpy\trader\engine.py:229
+msgid "订阅行情 -> {}：{}"
+msgstr "Subscribe market data -> {}: {}"
+
+#: vnpy\trader\engine.py:239
+msgid "委托下单 -> {}：{}"
+msgstr "Send new order -> {}: {}"
+
+#: vnpy\trader\engine.py:251
+msgid "委托撤单 -> {}：{}"
+msgstr "Cancel existing order -> {}: {}"
+
+#: vnpy\trader\engine.py:261
+msgid "报价下单 -> {}：{}"
+msgstr "Send new quote -> {}: {}"
+
+#: vnpy\trader\engine.py:273
+msgid "报价撤单 -> {}：{}"
+msgstr "Cancel existing quote -> {}: {}"
+
+#: vnpy\trader\engine.py:283
+msgid "查询K线 -> {}：{}"
+msgstr "Query history data -> {}: {}"
+
 #: vnpy\trader\engine.py:663
 msgid "邮件发送失败: {}"
 msgstr "Sending email failed: {}"
@@ -626,4 +654,174 @@ msgstr "Changes to the global configuration will take effect after a restart!"
 #: vnpy\trader\utility.py:209
 msgid "合成日K线必须传入每日收盘时间"
 msgstr "The daily_end parameter is required for generating daily bar"
+
+#: vnpy\trader\ui\mainwindow.py:146
+msgid "微信"
+msgstr "WeChat"
+
+#: vnpy\trader\engine.py:797
+msgid "微信会话已过期，请通过菜单重新扫码绑定"
+msgstr "WeChat session has expired, please scan the QR code from the menu to bind again"
+
+#: vnpy\trader\engine.py:802
+msgid "微信推送失败：{}"
+msgstr "WeChat push failed: {}"
+
+#: vnpy\trader\wechat.py:139
+msgid "二维码响应缺少 qrcode"
+msgstr "QR-code response missing qrcode"
+
+#: vnpy\trader\wechat.py:177
+msgid "扫码确认响应缺少凭据"
+msgstr "QR-code confirmation response missing credentials"
+
+#: vnpy\trader\wechat.py:218 vnpy\trader\wechat.py:247
+msgid "HTTP 请求超时: {}"
+msgstr "HTTP request timed out: {}"
+
+#: vnpy\trader\wechat.py:220 vnpy\trader\wechat.py:249
+msgid "HTTP 请求失败: {}"
+msgstr "HTTP request failed: {}"
+
+#: vnpy\trader\wechat.py:262
+msgid "非 JSON 响应: {}"
+msgstr "Non-JSON response: {}"
+
+#: vnpy\trader\wechat.py:265
+msgid "响应不是 JSON 对象: {}"
+msgstr "Response is not a JSON object: {}"
+
+#: vnpy\trader\wechat.py:272
+msgid "iLink 会话已过期"
+msgstr "iLink session has expired"
+
+#: vnpy\trader\wechat.py:275
+msgid "iLink 错误 ret={} errcode={} errmsg={}"
+msgstr "iLink error ret={} errcode={} errmsg={}"
+
+#: vnpy\trader\ui\widget.py:1350
+msgid "扫码超时或被取消"
+msgstr "QR-code scanning timed out or was cancelled"
+
+#: vnpy\trader\ui\widget.py:1368
+msgid "等待首条消息超时"
+msgstr "Timed out waiting for the first message"
+
+#: vnpy\trader\ui\widget.py:1396
+msgid "微信通知"
+msgstr "WeChat Notification"
+
+#: vnpy\trader\ui\widget.py:1424
+msgid "账号状态"
+msgstr "Account Status"
+
+#: vnpy\trader\ui\widget.py:1448
+msgid ""
+"控制两次微信推送之间的最小间隔。\n"
+"间隔内的新消息会暂存，并在下次推送时合并发送。\n"
+"用户每发送 1 条消息，机器人可在 24 小时内推送 10 条；超限后需用户再次发送消息才能恢复。"
+msgstr ""
+"Controls the minimum interval between two WeChat pushes.\n"
+"New messages received during the interval will be queued and merged into the next push.\n"
+"For each message sent by the user, the bot can push 10 messages within 24 hours; after the limit is exceeded, the user needs to send another message to resume."
+
+#: vnpy\trader\ui\widget.py:1453
+msgid " 秒"
+msgstr " sec"
+
+#: vnpy\trader\ui\widget.py:1447
+msgid "用户 ID："
+msgstr "User ID:"
+
+#: vnpy\trader\ui\widget.py:1448
+msgid "网关："
+msgstr "Gateway:"
+
+#: vnpy\trader\ui\widget.py:1462
+msgid "推送设置"
+msgstr "Push Settings"
+
+#: vnpy\trader\ui\widget.py:1465
+msgid "最小间隔："
+msgstr "Min Interval:"
+
+#: vnpy\trader\ui\widget.py:1450 vnpy\trader\ui\widget.py:1579
+msgid "开始绑定"
+msgstr "Start Binding"
+
+#: vnpy\trader\ui\widget.py:1453 vnpy\trader\ui\widget.py:1590
+msgid "测试消息"
+msgstr "Test Message"
+
+#: vnpy\trader\ui\widget.py:1456 vnpy\trader\ui\widget.py:1667
+msgid "解除绑定"
+msgstr "Unbind"
+
+#: vnpy\trader\ui\widget.py:1480
+msgid "正在向服务器请求二维码，请稍候..."
+msgstr "Requesting QR code from server, please wait..."
+
+#: vnpy\trader\ui\widget.py:1483 vnpy\trader\ui\widget.py:1505 vnpy\trader\ui\widget.py:1524
+msgid "取消绑定"
+msgstr "Cancel Binding"
+
+#: vnpy\trader\ui\widget.py:1498
+msgid "第一步：请使用微信扫描下方二维码"
+msgstr "Step 1: Please scan the QR code below with WeChat"
+
+#: vnpy\trader\ui\widget.py:1521
+msgid "第二步：扫码成功！\n\n请在微信中向机器人发送任意文字消息以完成最终激活。"
+msgstr "Step 2: QR code scanned successfully!\n\nPlease send any text message to the bot in WeChat to complete activation."
+
+#: vnpy\trader\ui\widget.py:1543
+msgid "完成"
+msgstr "Done"
+
+#: vnpy\trader\ui\widget.py:1546
+msgid "重试"
+msgstr "Retry"
+
+#: vnpy\trader\ui\widget.py:1563
+msgid "状态：已绑定"
+msgstr "Status: Bound"
+
+#: vnpy\trader\ui\widget.py:1570
+msgid "重新绑定"
+msgstr "Rebind"
+
+#: vnpy\trader\ui\widget.py:1574
+msgid "状态：未绑定"
+msgstr "Status: Not Bound"
+
+#: vnpy\trader\ui\widget.py:1587
+msgid "VeighNa Trader 消息推送测试"
+msgstr "VeighNa Trader notification test"
+
+#: vnpy\trader\ui\widget.py:1591
+msgid "测试消息已加入推送队列！"
+msgstr "Test message has been added to the push queue!"
+
+#: vnpy\trader\ui\widget.py:1621
+msgid "二维码图片加载失败"
+msgstr "Failed to load QR-code image"
+
+#: vnpy\trader\ui\widget.py:1642
+msgid "微信通知绑定成功！"
+msgstr "WeChat notification bound successfully!"
+
+#: vnpy\trader\ui\widget.py:1650
+msgid "绑定失败：\n{}"
+msgstr "Binding failed:\n{}"
+
+#: vnpy\trader\ui\widget.py:1668
+msgid "确认解除当前微信绑定？"
+msgstr "Confirm unbinding the current WeChat account?"
+
+#: vnpy\trader\engine.py:239
+msgid "连接登录 -> {}"
+msgstr "Connect gateway -> {}"
+
+#: vnpy\trader\optimize.py:207
+msgid "个体突变概率：{:.0%}"
+msgstr "Individual mutation probability: {:.0%}"
 

@@ -6,7 +6,7 @@ from types import ModuleType
 import webbrowser
 from functools import partial
 from importlib import import_module
-from typing import TypeVar
+from typing import TypeVar, cast
 from collections.abc import Callable
 
 import vnpy
@@ -26,9 +26,10 @@ from .widget import (
     ContractManager,
     TradingWidget,
     AboutDialog,
-    GlobalDialog
+    GlobalDialog,
+    WechatDialog
 )
-from ..engine import MainEngine, BaseApp
+from ..engine import MainEngine, BaseApp, EmailEngine
 from ..utility import get_icon_path, TRADER_DIR
 from ..locale import _
 
@@ -137,9 +138,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_action(app_menu, app.display_name, app.icon_name, func, True)
 
         # Global setting editor
-        action: QtGui.QAction = QtGui.QAction(_("配置"), self)
-        action.triggered.connect(self.edit_global_setting)
-        bar.addAction(action)
+        setting_action: QtGui.QAction = QtGui.QAction(_("配置"), self)
+        setting_action.triggered.connect(self.edit_global_setting)
+        bar.addAction(setting_action)
+
+        # Wechat notification
+        wechat_action: QtGui.QAction = QtGui.QAction(_("微信"), self)
+        wechat_action.triggered.connect(self.open_wechat_dialog)
+        bar.addAction(wechat_action)
 
         # Help menu
         help_menu: QtWidgets.QMenu = bar.addMenu(_("帮助"))
@@ -319,7 +325,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Sending a test email.
         """
-        self.main_engine.send_email("VeighNa Trader", "testing", None)
+        email_engine: EmailEngine = cast(EmailEngine, self.main_engine.get_engine("email"))
+        email_engine.send_email("VeighNa Trader", "testing")
 
     def open_forum(self) -> None:
         """
@@ -330,4 +337,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         """
         dialog: GlobalDialog = GlobalDialog()
+        dialog.exec()
+
+    def open_wechat_dialog(self) -> None:
+        """
+        Open WeChat notification dialog.
+        """
+        dialog: WechatDialog = WechatDialog(self.main_engine, self.event_engine)
         dialog.exec()

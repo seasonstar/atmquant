@@ -4,16 +4,20 @@ Basic widgets for UI.
 
 import csv
 import platform
+import time
 from enum import Enum
+from io import BytesIO
 from typing import cast, Any
 from copy import copy
 from tzlocal import get_localzone_name
 from datetime import datetime
 from importlib import metadata
 
+import qrcode
+
 from .qt import QtCore, QtGui, QtWidgets, Qt
 from ..constant import Direction, Exchange, Offset, OrderType
-from ..engine import MainEngine, Event, EventEngine
+from ..engine import MainEngine, Event, EventEngine, WechatEngine
 from ..event import (
     EVENT_QUOTE,
     EVENT_TICK,
@@ -36,6 +40,14 @@ from ..object import (
 from ..utility import load_json, save_json, get_digits, ZoneInfo
 from ..setting import SETTING_FILENAME, SETTINGS
 from ..locale import _
+from ..wechat import (
+    Credentials,
+    WeixinError,
+    WeixinTimeout,
+    poll,
+    request_qrcode,
+    wait_for_login,
+)
 
 
 COLOR_LONG = QtGui.QColor("red")
@@ -1290,3 +1302,409 @@ class GlobalDialog(QtWidgets.QDialog):
 
         save_json(SETTING_FILENAME, settings)
         self.accept()
+
+
+class WechatWorker(QtCore.QThread):
+    """
+    Background worker for two-phase WeChat binding: QR-code login first,
+    then wait for the user's first inbound message to capture user info.
+    """
+
+    signal_qr_ready: QtCore.Signal = QtCore.Signal(str)
+    signal_waiting_message: QtCore.Signal = QtCore.Signal()
+    signal_bound: QtCore.Signal = QtCore.Signal(object, object)
+    signal_failed: QtCore.Signal = QtCore.Signal(str)
+
+    def __init__(self) -> None:
+        """"""
+        super().__init__()
+
+        self._stop: bool = False
+
+    def stop(self) -> None:
+        """Request the worker loop to terminate at the next checkpoint."""
+        self._stop = True
+
+    def run(self) -> None:
+        """"""
+        try:
+            deadline: float = time.monotonic() + 600.0      # wait for 10 minutes
+
+            # Phase 1: request QR-code and wait for user confirmation
+            creds: Credentials | None = None
+            while not self._stop and time.monotonic() < deadline:
+                try:
+                    qrcode_value, scan_url = request_qrcode()
+                    self.signal_qr_ready.emit(scan_url)
+
+                    creds = wait_for_login(
+                        qrcode_value,
+                        deadline,
+                    )
+                    if creds is not None:
+                        break
+                except WeixinTimeout:
+                    continue
+
+            if self._stop or creds is None:
+                self.signal_failed.emit(_("扫码超时或被取消"))
+                return
+
+            # Phase 2: long-poll inbound messages until the first one arrives
+            self.signal_waiting_message.emit()
+            sync_buf: str = ""
+            while not self._stop and time.monotonic() < deadline:
+                try:
+                    user_ids, sync_buf = poll(
+                        creds,
+                        sync_buf,
+                    )
+                    if user_ids:
+                        self.signal_bound.emit(creds, user_ids[0])
+                        return
+                except WeixinTimeout:
+                    continue
+
+            self.signal_failed.emit(_("等待首条消息超时"))
+        except WeixinError as exc:
+            self.signal_failed.emit(str(exc))
+        except Exception as exc:
+            self.signal_failed.emit(str(exc))
+
+
+class WechatDialog(QtWidgets.QDialog):
+    """
+    WeChat binding dialog: shows status when bound, drives the scan and
+    first-message flow when not bound.
+    """
+
+    def __init__(self, main_engine: MainEngine, event_engine: EventEngine) -> None:
+        """"""
+        super().__init__()
+
+        self.main_engine: MainEngine = main_engine
+        self.event_engine: EventEngine = event_engine
+        self.wechat_engine: WechatEngine = cast(WechatEngine, main_engine.get_engine("wechat"))
+
+        self.worker: WechatWorker | None = None
+
+        self.init_ui()
+        self.refresh_status()
+
+    def init_ui(self) -> None:
+        """"""
+        self.setWindowTitle(_("微信通知"))
+        self.setMinimumWidth(380)
+
+        # Create Stacked Widget
+        self.stack: QtWidgets.QStackedWidget = QtWidgets.QStackedWidget()
+
+        # Create pages
+        self.page_status: QtWidgets.QWidget = self._create_status_page()
+        self.page_loading: QtWidgets.QWidget = self._create_loading_page()
+        self.page_qr: QtWidgets.QWidget = self._create_qr_page()
+        self.page_waiting: QtWidgets.QWidget = self._create_waiting_page()
+        self.page_result: QtWidgets.QWidget = self._create_result_page()
+
+        self.stack.addWidget(self.page_status)
+        self.stack.addWidget(self.page_loading)
+        self.stack.addWidget(self.page_qr)
+        self.stack.addWidget(self.page_waiting)
+        self.stack.addWidget(self.page_result)
+
+        vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        vbox.addWidget(self.stack)
+        self.setLayout(vbox)
+
+    def _create_status_page(self) -> QtWidgets.QWidget:
+        """Create the status page."""
+        page: QtWidgets.QWidget = QtWidgets.QWidget()
+
+        # Status area
+        group_status: QtWidgets.QGroupBox = QtWidgets.QGroupBox(_("账号状态"))
+        self.status_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        # Info form layout
+        self.info_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        self.info_form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
+        self.info_form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.info_widget.setLayout(self.info_form)
+
+        self.bot_id_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.bot_id_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.bot_id_label.setWordWrap(True)
+
+        self.user_id_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.user_id_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.user_id_label.setWordWrap(True)
+
+        self.gateway_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.gateway_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.gateway_label.setWordWrap(True)
+
+        self.interval_spin: QtWidgets.QSpinBox = QtWidgets.QSpinBox()
+        self.interval_spin.setRange(1, 8640)
+        interval_tip: str = _(
+            "控制两次微信推送之间的间隔时间。\n"
+            "间隔内的新消息会暂存，并在下次推送时合并发送。\n"
+            "用户每发送 1 条消息，机器人可在 24 小时内推送 10 条；超限后需用户再次发送消息才能恢复。"
+        )
+        self.interval_spin.setSuffix(_(" 秒"))
+        self.interval_spin.setToolTip(interval_tip)
+        self.interval_spin.valueChanged.connect(self.change_interval)
+
+        self.interval_spin.setValue(self.wechat_engine.send_interval)
+        self.info_form.addRow("Bot ID：", self.bot_id_label)
+        self.info_form.addRow(_("用户 ID："), self.user_id_label)
+        self.info_form.addRow(_("网关："), self.gateway_label)
+
+        group_setting: QtWidgets.QGroupBox = QtWidgets.QGroupBox(_("推送设置"))
+        setting_form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
+        setting_form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        setting_form.addRow(_("推送间隔："), self.interval_spin)
+        group_setting.setLayout(setting_form)
+
+        self.bind_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("开始绑定"))
+        self.bind_button.clicked.connect(self.start_bind)
+
+        self.test_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("测试消息"))
+        self.test_button.clicked.connect(self.send_test_message)
+
+        self.unbind_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("解除绑定"))
+        self.unbind_button.clicked.connect(self.unbind)
+
+        status_layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        status_layout.addStretch()
+        status_layout.addWidget(self.status_label)
+        status_layout.addWidget(self.info_widget)
+        status_layout.addStretch()
+        status_layout.addWidget(self.bind_button)
+        status_layout.addWidget(self.test_button)
+        status_layout.addWidget(self.unbind_button)
+        group_status.setLayout(status_layout)
+
+        layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        layout.addWidget(group_status)
+        layout.addWidget(group_setting)
+        page.setLayout(layout)
+
+        return page
+
+    def _create_loading_page(self) -> QtWidgets.QWidget:
+        """Create the loading page."""
+        page: QtWidgets.QWidget = QtWidgets.QWidget()
+        layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+
+        label: QtWidgets.QLabel = QtWidgets.QLabel(_("正在向服务器请求二维码，请稍候..."))
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        cancel_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("取消绑定"))
+        cancel_button.clicked.connect(self.cancel_bind)
+
+        layout.addStretch()
+        layout.addWidget(label)
+        layout.addStretch()
+        layout.addWidget(cancel_button)
+        page.setLayout(layout)
+        return page
+
+    def _create_qr_page(self) -> QtWidgets.QWidget:
+        """Create the QR page."""
+        page: QtWidgets.QWidget = QtWidgets.QWidget()
+        layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+
+        label: QtWidgets.QLabel = QtWidgets.QLabel(_("第一步：请使用微信扫描下方二维码"))
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        self.qr_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.qr_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.qr_label.setMinimumSize(260, 260)
+
+        cancel_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("取消绑定"))
+        cancel_button.clicked.connect(self.cancel_bind)
+
+        layout.addStretch()
+        layout.addWidget(label)
+        layout.addWidget(self.qr_label)
+        layout.addStretch()
+        layout.addWidget(cancel_button)
+        page.setLayout(layout)
+        return page
+
+    def _create_waiting_page(self) -> QtWidgets.QWidget:
+        """Create the waiting page."""
+        page: QtWidgets.QWidget = QtWidgets.QWidget()
+        layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+
+        label: QtWidgets.QLabel = QtWidgets.QLabel(_("第二步：扫码成功！\n\n请在微信中向机器人发送任意文字消息以完成最终激活。"))
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        cancel_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("取消绑定"))
+        cancel_button.clicked.connect(self.cancel_bind)
+
+        layout.addStretch()
+        layout.addWidget(label)
+        layout.addStretch()
+        layout.addWidget(cancel_button)
+        page.setLayout(layout)
+        return page
+
+    def _create_result_page(self) -> QtWidgets.QWidget:
+        """Create the result page."""
+        page: QtWidgets.QWidget = QtWidgets.QWidget()
+        layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+
+        self.result_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.result_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.result_label.setWordWrap(True)
+
+        self.result_ok_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("完成"))
+        self.result_ok_button.clicked.connect(self.refresh_status)
+
+        self.result_retry_button: QtWidgets.QPushButton = QtWidgets.QPushButton(_("重试"))
+        self.result_retry_button.clicked.connect(self.start_bind)
+
+        layout.addStretch()
+        layout.addWidget(self.result_label)
+        layout.addStretch()
+        layout.addWidget(self.result_retry_button)
+        layout.addWidget(self.result_ok_button)
+        page.setLayout(layout)
+        return page
+
+    def refresh_status(self) -> None:
+        """Refresh dialog widgets according to current binding state."""
+        creds: Credentials | None = self.wechat_engine.creds
+        bound: bool = bool(creds and self.wechat_engine.user_id)
+
+        if bound and creds:
+            self.status_label.setText(_("状态：已绑定"))
+
+            self.bot_id_label.setText(creds.bot_id)
+            self.user_id_label.setText(self.wechat_engine.user_id)
+            self.gateway_label.setText(creds.base_url)
+
+            self.info_widget.show()
+            self.bind_button.setText(_("重新绑定"))
+            self.test_button.show()
+            self.unbind_button.setEnabled(True)
+        else:
+            self.status_label.setText(_("状态：未绑定"))
+            self.bot_id_label.clear()
+            self.user_id_label.clear()
+            self.gateway_label.clear()
+            self.info_widget.hide()
+            self.bind_button.setText(_("开始绑定"))
+            self.test_button.hide()
+            self.unbind_button.setEnabled(False)
+
+        with QtCore.QSignalBlocker(self.interval_spin):
+            self.interval_spin.setValue(self.wechat_engine.send_interval)
+
+        self.stack.setCurrentWidget(self.page_status)
+
+    def send_test_message(self) -> None:
+        """Send a test message via WeChat engine."""
+        self.wechat_engine.send_wechat(_("VeighNa Trader 消息推送测试"))
+        QtWidgets.QMessageBox.information(
+            self,
+            _("测试消息"),
+            _("测试消息已加入推送队列！"),
+            QtWidgets.QMessageBox.StandardButton.Ok
+        )
+
+    def start_bind(self) -> None:
+        """Start the background binding worker."""
+        if self.worker and self.worker.isRunning():
+            return
+
+        self.stack.setCurrentWidget(self.page_loading)
+
+        self.worker = WechatWorker()
+        self.worker.signal_qr_ready.connect(self.show_qrcode)
+        self.worker.signal_waiting_message.connect(self.show_waiting_message)
+        self.worker.signal_bound.connect(self.finish_bind)
+        self.worker.signal_failed.connect(self.fail_bind)
+        self.worker.start()
+
+    def show_qrcode(self, url: str) -> None:
+        """Render the scan URL as a QR-code pixmap in the dialog."""
+        qr: Any = qrcode.QRCode(border=1)
+        qr.add_data(url)
+        qr.make(fit=True)
+        img: Any = qr.make_image(fill_color="black", back_color="white")
+
+        buf: BytesIO = BytesIO()
+        img.save(buf, format="PNG")
+
+        pixmap: QtGui.QPixmap = QtGui.QPixmap()
+        if not pixmap.loadFromData(buf.getvalue()):
+            self.fail_bind(_("二维码图片加载失败"))
+            return
+
+        scaled: QtGui.QPixmap = pixmap.scaled(
+            260,
+            260,
+            QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            QtCore.Qt.TransformationMode.SmoothTransformation
+        )
+        self.qr_label.setPixmap(scaled)
+
+        self.stack.setCurrentWidget(self.page_qr)
+
+    def show_waiting_message(self) -> None:
+        """Switch UI to the second binding phase."""
+        self.stack.setCurrentWidget(self.page_waiting)
+
+    def finish_bind(self, creds: Credentials, user_id: str) -> None:
+        """Persist binding result via WechatEngine and refresh the UI."""
+        self.wechat_engine.bind(creds, user_id)
+
+        self.result_label.setText(_("微信通知绑定成功！"))
+        self.result_retry_button.hide()
+        self.result_ok_button.show()
+
+        self.stack.setCurrentWidget(self.page_result)
+
+    def fail_bind(self, error: str) -> None:
+        """Show the failure reason and reset the UI for retry."""
+        self.result_label.setText(_("绑定失败：\n{}").format(error))
+        self.result_retry_button.show()
+        self.result_ok_button.show()
+
+        self.stack.setCurrentWidget(self.page_result)
+
+    def cancel_bind(self) -> None:
+        """Cancel binding process and return to status page."""
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(2000)
+        self.refresh_status()
+
+    def unbind(self) -> None:
+        """Confirm and clear current binding."""
+        reply: QtWidgets.QMessageBox.StandardButton = QtWidgets.QMessageBox.question(
+            self,
+            _("解除绑定"),
+            _("确认解除当前微信绑定？"),
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
+        )
+
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.wechat_engine.unbind()
+            self.refresh_status()
+
+    def change_interval(self, value: int) -> None:
+        """Persist send interval updates from the status page."""
+        self.wechat_engine.send_interval = value
+        self.wechat_engine.save_setting()
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        """Stop the binding worker before closing the dialog."""
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(2000)
+
+        super().closeEvent(event)

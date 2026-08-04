@@ -1,6 +1,6 @@
 # ATMQuant - 开源AI量化交易框架
 
-> 基于 vnpy 4.1 的开源 AI 量化交易框架：多周期图表、图表内交易与风控、AI 策略引擎与指标计算管线已纳入本仓库，便于二次开发与学习。
+> 基于 vnpy 4.4 的开源 AI 量化交易框架：多周期图表、图表内交易与风控、AI 策略引擎与指标计算管线已纳入本仓库，便于二次开发与学习。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)

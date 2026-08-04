@@ -13,7 +13,7 @@ from vnpy.event import Event, EventEngine
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.constant import Interval
 from vnpy.trader.utility import extract_vt_symbol
-from vnpy.trader.object import HistoryRequest, TickData, ContractData
+from vnpy.trader.object import HistoryRequest, TickData, BarData, ContractData
 from vnpy.trader.datafeed import BaseDatafeed, get_datafeed
 from vnpy.trader.database import BaseDatabase, get_database
 
@@ -268,9 +268,9 @@ class BacktesterEngine(BaseEngine):
         end: datetime,
         rate: float,
         slippage: float,
-        size: int,
+        size: float,
         pricetick: float,
-        capital: int,
+        capital: float,
         setting: dict
     ) -> bool:
         if self.thread:
@@ -298,7 +298,7 @@ class BacktesterEngine(BaseEngine):
 
         return True
 
-    def get_result_df(self) -> DataFrame:
+    def get_result_df(self) -> DataFrame | None:
         """"""
         return self.result_df
 
@@ -396,9 +396,9 @@ class BacktesterEngine(BaseEngine):
         end: datetime,
         rate: float,
         slippage: float,
-        size: int,
+        size: float,
         pricetick: float,
-        capital: int,
+        capital: float,
         optimization_setting: OptimizationSetting,
         use_ga: bool,
         max_workers: int
@@ -459,28 +459,29 @@ class BacktesterEngine(BaseEngine):
 
         try:
             if interval == "tick":
-                data: list[TickData] = self.datafeed.query_tick_history(req, self.write_log)
+                tick_data: list[TickData] = self.datafeed.query_tick_history(req, self.write_log)
+                if tick_data:
+                    self.database.save_tick_data(tick_data)
+                    self.write_log(_("{}-{}历史数据下载完成").format(vt_symbol, interval))
+                else:
+                    self.write_log(_("数据下载失败，无法获取{}的历史数据").format(vt_symbol))
             else:
                 contract: ContractData | None = self.main_engine.get_contract(vt_symbol)
 
                 # If history data provided in gateway, then query
                 if contract and contract.history_data:
-                    data = self.main_engine.query_history(
+                    bar_data: list[BarData] = self.main_engine.query_history(
                         req, contract.gateway_name
                     )
                 # Otherwise use RQData to query data
                 else:
-                    data = self.datafeed.query_bar_history(req, self.write_log)
+                    bar_data = self.datafeed.query_bar_history(req, self.write_log)
 
-            if data:
-                if interval == "tick":
-                    self.database.save_tick_data(data)
+                if bar_data:
+                    self.database.save_bar_data(bar_data)
+                    self.write_log(_("{}-{}历史数据下载完成").format(vt_symbol, interval))
                 else:
-                    self.database.save_bar_data(data)
-
-                self.write_log(_("{}-{}历史数据下载完成").format(vt_symbol, interval))
-            else:
-                self.write_log(_("数据下载失败，无法获取{}的历史数据").format(vt_symbol))
+                    self.write_log(_("数据下载失败，无法获取{}的历史数据").format(vt_symbol))
         except Exception:
             msg: str = _("数据下载失败，触发异常：\n{}").format(traceback.format_exc())
             self.write_log(msg)

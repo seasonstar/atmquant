@@ -9,6 +9,7 @@ from pathlib import Path
 from collections.abc import Callable
 from decimal import Decimal
 from math import floor, ceil
+from typing import overload, Literal
 
 import numpy as np
 import talib
@@ -857,6 +858,10 @@ class ArrayManager:
         """
         return self.open_interest_array
 
+    @overload
+    def sma(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def sma(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def sma(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Simple moving average.
@@ -868,6 +873,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def ema(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def ema(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def ema(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Exponential moving average.
@@ -879,6 +888,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def kama(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def kama(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def kama(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         KAMA.
@@ -890,6 +903,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def wma(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def wma(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def wma(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         WMA.
@@ -901,6 +918,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def apo(self, fast_period: int, slow_period: int, matype: int = 0, array: Literal[False] = False) -> float: ...
+    @overload
+    def apo(self, fast_period: int, slow_period: int, matype: int = 0, *, array: Literal[True]) -> np.ndarray: ...
     def apo(
         self,
         fast_period: int,
@@ -918,6 +939,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def cmo(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def cmo(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def cmo(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         CMO.
@@ -929,6 +954,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def mom(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def mom(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def mom(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         MOM.
@@ -940,6 +969,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def ppo(self, fast_period: int, slow_period: int, matype: int = 0, array: Literal[False] = False) -> float: ...
+    @overload
+    def ppo(self, fast_period: int, slow_period: int, matype: int = 0, *, array: Literal[True]) -> np.ndarray: ...
     def ppo(
         self,
         fast_period: int,
@@ -957,6 +990,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def roc(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def roc(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def roc(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         ROC.
@@ -968,6 +1005,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def rocr(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def rocr(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def rocr(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         ROCR.
@@ -979,6 +1020,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def rocp(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def rocp(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def rocp(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         ROCP.
@@ -990,6 +1035,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def rocr_100(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def rocr_100(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def rocr_100(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         ROCR100.
@@ -1001,6 +1050,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def trix(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def trix(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def trix(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         TRIX.
@@ -1012,6 +1065,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def std(self, n: int, nbdev: int = 1, array: Literal[False] = False) -> float: ...
+    @overload
+    def std(self, n: int, nbdev: int = 1, *, array: Literal[True]) -> np.ndarray: ...
     def std(self, n: int, nbdev: int = 1, array: bool = False) -> float | np.ndarray:
         """
         Standard deviation.
@@ -1023,6 +1080,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def obv(self, array: Literal[False] = False) -> float: ...
+    @overload
+    def obv(self, array: Literal[True]) -> np.ndarray: ...
     def obv(self, array: bool = False) -> float | np.ndarray:
         """
         OBV.
@@ -1034,6 +1095,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def cci(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def cci(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def cci(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Commodity Channel Index (CCI).
@@ -1045,6 +1110,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def atr(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def atr(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def atr(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Average True Range (ATR).
@@ -1056,6 +1125,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def natr(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def natr(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def natr(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         NATR.
@@ -1067,6 +1140,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def rsi(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def rsi(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def rsi(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Relative Strenght Index (RSI).
@@ -1078,6 +1155,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def macd(self, fast_period: int, slow_period: int, signal_period: int, array: Literal[False] = False) -> tuple[float, float, float]: ...
+    @overload
+    def macd(self, fast_period: int, slow_period: int, signal_period: int, array: Literal[True]) -> tuple[np.ndarray, np.ndarray, np.ndarray]: ...
     def macd(
         self,
         fast_period: int,
@@ -1095,6 +1176,10 @@ class ArrayManager:
             return macd, signal, hist
         return macd[-1], signal[-1], hist[-1]
 
+    @overload
+    def adx(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def adx(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def adx(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         ADX.
@@ -1106,6 +1191,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def adxr(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def adxr(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def adxr(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         ADXR.
@@ -1117,6 +1206,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def dx(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def dx(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def dx(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         DX.
@@ -1128,6 +1221,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def minus_di(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def minus_di(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def minus_di(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         MINUS_DI.
@@ -1139,6 +1236,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def plus_di(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def plus_di(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def plus_di(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         PLUS_DI.
@@ -1150,6 +1251,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def willr(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def willr(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def willr(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         WILLR.
@@ -1161,6 +1266,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def ultosc(self, time_period1: int = 7, time_period2: int = 14, time_period3: int = 28, array: Literal[False] = False) -> float: ...
+    @overload
+    def ultosc(self, time_period1: int = 7, time_period2: int = 14, time_period3: int = 28, *, array: Literal[True]) -> np.ndarray: ...
     def ultosc(
         self,
         time_period1: int = 7,
@@ -1178,6 +1287,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def trange(self, array: Literal[False] = False) -> float: ...
+    @overload
+    def trange(self, array: Literal[True]) -> np.ndarray: ...
     def trange(self, array: bool = False) -> float | np.ndarray:
         """
         TRANGE.
@@ -1189,6 +1302,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def boll(self, n: int, dev: float, array: Literal[False] = False) -> tuple[float, float]: ...
+    @overload
+    def boll(self, n: int, dev: float, array: Literal[True]) -> tuple[np.ndarray, np.ndarray]: ...
     def boll(
         self,
         n: int,
@@ -1212,6 +1329,10 @@ class ArrayManager:
             down: float = mid - std * dev
             return up, down
 
+    @overload
+    def keltner(self, n: int, dev: float, array: Literal[False] = False) -> tuple[float, float]: ...
+    @overload
+    def keltner(self, n: int, dev: float, array: Literal[True]) -> tuple[np.ndarray, np.ndarray]: ...
     def keltner(
         self,
         n: int,
@@ -1235,6 +1356,10 @@ class ArrayManager:
             down: float = mid - atr * dev
             return up, down
 
+    @overload
+    def donchian(self, n: int, array: Literal[False] = False) -> tuple[float, float]: ...
+    @overload
+    def donchian(self, n: int, array: Literal[True]) -> tuple[np.ndarray, np.ndarray]: ...
     def donchian(
         self, n: int, array: bool = False
     ) -> tuple[np.ndarray, np.ndarray] | tuple[float, float]:
@@ -1248,6 +1373,10 @@ class ArrayManager:
             return up, down
         return up[-1], down[-1]
 
+    @overload
+    def aroon(self, n: int, array: Literal[False] = False) -> tuple[float, float]: ...
+    @overload
+    def aroon(self, n: int, array: Literal[True]) -> tuple[np.ndarray, np.ndarray]: ...
     def aroon(
         self,
         n: int,
@@ -1262,6 +1391,10 @@ class ArrayManager:
             return aroon_up, aroon_down
         return aroon_up[-1], aroon_down[-1]
 
+    @overload
+    def aroonosc(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def aroonosc(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def aroonosc(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Aroon Oscillator.
@@ -1274,6 +1407,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def minus_dm(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def minus_dm(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def minus_dm(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         MINUS_DM.
@@ -1286,6 +1423,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def plus_dm(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def plus_dm(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def plus_dm(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         PLUS_DM.
@@ -1298,6 +1439,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def mfi(self, n: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def mfi(self, n: int, array: Literal[True]) -> np.ndarray: ...
     def mfi(self, n: int, array: bool = False) -> float | np.ndarray:
         """
         Money Flow Index.
@@ -1309,6 +1454,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def ad(self, array: Literal[False] = False) -> float: ...
+    @overload
+    def ad(self, array: Literal[True]) -> np.ndarray: ...
     def ad(self, array: bool = False) -> float | np.ndarray:
         """
         AD.
@@ -1320,6 +1469,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def adosc(self, fast_period: int, slow_period: int, array: Literal[False] = False) -> float: ...
+    @overload
+    def adosc(self, fast_period: int, slow_period: int, array: Literal[True]) -> np.ndarray: ...
     def adosc(
         self,
         fast_period: int,
@@ -1336,6 +1489,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def bop(self, array: Literal[False] = False) -> float: ...
+    @overload
+    def bop(self, array: Literal[True]) -> np.ndarray: ...
     def bop(self, array: bool = False) -> float | np.ndarray:
         """
         BOP.
@@ -1348,6 +1505,10 @@ class ArrayManager:
         result_value: float = result_array[-1]
         return result_value
 
+    @overload
+    def stoch(self, fastk_period: int, slowk_period: int, slowk_matype: int, slowd_period: int, slowd_matype: int, array: Literal[False] = False) -> tuple[float, float]: ...
+    @overload
+    def stoch(self, fastk_period: int, slowk_period: int, slowk_matype: int, slowd_period: int, slowd_matype: int, array: Literal[True]) -> tuple[np.ndarray, np.ndarray]: ...
     def stoch(
         self,
         fastk_period: int,
@@ -1374,6 +1535,10 @@ class ArrayManager:
             return k, d
         return k[-1], d[-1]
 
+    @overload
+    def sar(self, acceleration: float, maximum: float, array: Literal[False] = False) -> float: ...
+    @overload
+    def sar(self, acceleration: float, maximum: float, array: Literal[True]) -> np.ndarray: ...
     def sar(self, acceleration: float, maximum: float, array: bool = False) -> float | np.ndarray:
         """
         SAR.

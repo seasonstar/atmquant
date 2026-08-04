@@ -1,11 +1,13 @@
 import smtplib
 import os
+import time
 import traceback
 from abc import ABC, abstractmethod
+from datetime import datetime
 from email.message import EmailMessage
 from queue import Empty, Queue
-from threading import Thread
-from typing import TypeVar
+from threading import Thread, current_thread
+from typing import Any, TypeVar, cast
 from collections.abc import Callable
 
 from vnpy.event import Event, EventEngine
@@ -39,10 +41,16 @@ from .object import (
     Exchange
 )
 from .setting import SETTINGS
-from .utility import TRADER_DIR
+from .utility import TRADER_DIR, load_json, save_json
 from .converter import OffsetConverter
 from .logger import logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
 from .locale import _
+from .wechat import (
+    Credentials,
+    SessionExpired,
+    WeixinError,
+    send_text,
+)
 
 
 EngineType = TypeVar("EngineType", bound="BaseEngine")
@@ -154,16 +162,29 @@ class MainEngine:
         self.convert_order_request: Callable[[OrderRequest, str, bool, bool], list[OrderRequest]] = oms_engine.convert_order_request
         self.get_converter: Callable[[str], OffsetConverter | None] = oms_engine.get_converter
 
-        email_engine: EmailEngine = self.add_engine(EmailEngine)
-        self.send_email: Callable[[str, str, str | None], None] = email_engine.send_email
+        self.add_engine(EmailEngine)
+        self.add_engine(WechatEngine)
 
-    def write_log(self, msg: str, source: str = "") -> None:
+    def write_log(self, msg: str, source: str = "MainEngine") -> None:
         """
         Put log event with specific message.
         """
         log: LogData = LogData(msg=msg, gateway_name=source)
         event: Event = Event(EVENT_LOG, log)
         self.event_engine.put(event)
+
+    def send_notification(self, content: str, subject: str | None = None) -> None:
+        """
+        Push notification through all configured channels.
+        """
+        if subject is None:
+            subject = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        email_engine: EmailEngine = cast(EmailEngine, self.get_engine("email"))
+        email_engine.send_email(subject, content)
+
+        wechat_engine: WechatEngine = cast(WechatEngine, self.get_engine("wechat"))
+        wechat_engine.send_wechat(f"{subject}\n{content}")
 
     def get_gateway(self, gateway_name: str) -> BaseGateway | None:
         """
@@ -216,6 +237,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("连接登录 -> {}").format(gateway_name))
+
             gateway.connect(setting)
 
     def subscribe(self, req: SubscribeRequest, gateway_name: str) -> None:
@@ -224,6 +247,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("订阅行情 -> {}：{}").format(gateway_name, req))
+
             gateway.subscribe(req)
 
     def send_order(self, req: OrderRequest, gateway_name: str) -> str:
@@ -232,6 +257,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("委托下单 -> {}：{}").format(gateway_name, req))
+
             return gateway.send_order(req)
         else:
             return ""
@@ -242,6 +269,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("委托撤单 -> {}：{}").format(gateway_name, req))
+
             gateway.cancel_order(req)
 
     def send_quote(self, req: QuoteRequest, gateway_name: str) -> str:
@@ -250,6 +279,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("报价下单 -> {}：{}").format(gateway_name, req))
+
             return gateway.send_quote(req)
         else:
             return ""
@@ -260,6 +291,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("报价撤单 -> {}：{}").format(gateway_name, req))
+
             gateway.cancel_quote(req)
 
     def query_history(self, req: HistoryRequest, gateway_name: str) -> list[BarData]:
@@ -268,6 +301,8 @@ class MainEngine:
         """
         gateway: BaseGateway | None = self.get_gateway(gateway_name)
         if gateway:
+            self.write_log(_("查询K线 -> {}：{}").format(gateway_name, req))
+
             return gateway.query_history(req)
         else:
             return []
@@ -315,7 +350,7 @@ class LogEngine(BaseEngine):
 
         log: LogData = event.data
         level: str | int = self.level_map.get(log.level, log.level)
-        logger.log(level, log.msg, gateway_name=log.gateway_name)
+        logger.bind(gateway_name=log.gateway_name).log(level, log.msg)
 
     def register_log(self, event_type: str) -> None:
         """Register log event handler"""
@@ -562,7 +597,7 @@ class EmailEngine(BaseEngine):
         super().__init__(main_engine, event_engine, "email")
 
         self.thread: Thread = Thread(target=self.run)
-        self.queue: Queue = Queue()
+        self.queue: Queue[EmailMessage] = Queue()
         self.active: bool = False
 
     def send_email(self, subject: str, content: str, receiver: str | None = None) -> None:
@@ -601,7 +636,7 @@ class EmailEngine(BaseEngine):
                         smtp.close()
                 except Exception:
                     log_msg: str = _("邮件发送失败: {}").format(traceback.format_exc())
-                    self.main_engine.write_log(log_msg, "EMAIL")
+                    self.main_engine.write_log(log_msg, "EmailEngine")
             except Empty:
                 pass
 
@@ -617,3 +652,187 @@ class EmailEngine(BaseEngine):
 
         self.active = False
         self.thread.join()
+
+
+class WechatEngine(BaseEngine):
+    """
+    Provides WeChat push notification function.
+    """
+
+    setting_filename: str = "wechat_setting.json"
+
+    def __init__(self, main_engine: MainEngine, event_engine: EventEngine) -> None:
+        """"""
+        super().__init__(main_engine, event_engine, "wechat")
+
+        self.creds: Credentials | None = None
+        self.user_id: str = ""
+
+        self.send_interval: int = 60
+        self.last_ts: float | None = None
+
+        self.pending_msgs: list[str] = []
+
+        self.queue: Queue[str] = Queue()
+        self.thread: Thread | None = None
+        self.active: bool = False
+
+        self.load_setting()
+
+        if self.creds and self.user_id:
+            self.activate()
+
+    def load_setting(self) -> None:
+        """Load credentials and user info from json file."""
+        data: dict[str, Any] = load_json(self.setting_filename)
+
+        bot_id: str = data.get("bot_id") or ""
+        token: str = data.get("token") or ""
+        if bot_id and token:
+            base_url: str = data.get("base_url") or "https://ilinkai.weixin.qq.com"
+            self.creds = Credentials(
+                bot_id=bot_id,
+                token=token,
+                base_url=base_url,
+            )
+        else:
+            self.creds = None
+
+        self.user_id = str(data.get("user_id") or data.get("chat_id") or "")
+
+        send_interval: Any = data.get("send_interval")
+        if isinstance(send_interval, int) and send_interval >= 0:
+            self.send_interval = send_interval
+
+    def save_setting(self) -> None:
+        """Persist current state back to json file."""
+        data: dict[str, Any] = {}
+
+        if self.creds:
+            data["bot_id"] = self.creds.bot_id
+            data["token"] = self.creds.token
+            data["base_url"] = self.creds.base_url
+
+        if self.user_id:
+            data["user_id"] = self.user_id
+
+        data["send_interval"] = self.send_interval
+
+        save_json(self.setting_filename, data)
+
+    def bind(self, creds: Credentials, user_id: str) -> None:
+        """
+        Complete binding with QR-code credentials and user ID.
+        """
+        self.deactivate()
+
+        self.creds = creds
+        self.user_id = user_id
+
+        self.save_setting()
+        self.activate()
+
+    def unbind(self) -> None:
+        """Clear credentials and stop pushing."""
+        self.deactivate()
+
+        self.creds = None
+        self.user_id = ""
+        self.pending_msgs.clear()
+
+        self.save_setting()
+
+    def activate(self) -> None:
+        """Start worker thread."""
+        self.start()
+
+    def deactivate(self) -> None:
+        """Stop worker thread."""
+        self.stop()
+
+    def start(self) -> None:
+        """Start WeChat sending worker."""
+        if self.active:
+            return
+
+        self.active = True
+        self.thread = Thread(target=self.run)
+        self.thread.start()
+
+    def stop(self) -> None:
+        """Stop WeChat sending worker."""
+        if not self.active:
+            return
+
+        self.active = False
+
+        if (
+            self.thread
+            and self.thread.is_alive()
+            and self.thread is not current_thread()
+        ):
+            self.thread.join()
+
+    def send_wechat(self, msg: str) -> None:
+        """Queue a text message for WeChat push."""
+        if not self.creds or not self.user_id:
+            return
+
+        self.queue.put(msg)
+
+    def run(self) -> None:
+        """Send queued WeChat messages in worker thread."""
+        while self.active:
+            try:
+                msg: str = self.queue.get(block=True, timeout=1)
+                self.pending_msgs.append(msg)
+            except Empty:
+                pass
+
+            while True:
+                try:
+                    self.pending_msgs.append(self.queue.get_nowait())
+                except Empty:
+                    break
+
+            if not self.pending_msgs:
+                continue
+
+            if not self.creds or not self.user_id:
+                continue
+
+            gap: float = self.send_interval
+            if gap > 0:
+                prior: float | None = self.last_ts
+                if prior is not None:
+                    wait_secs: float = prior + gap - time.monotonic()
+                    if wait_secs > 0:
+                        continue
+
+            msgs: list[str] = list(self.pending_msgs)
+            self.pending_msgs.clear()
+
+            try:
+                self.last_ts = time.monotonic()
+                send_text(
+                    self.creds,
+                    self.user_id,
+                    "\n".join(msgs),
+                )
+            except SessionExpired:
+                self.pending_msgs = msgs + self.pending_msgs
+                self.active = False
+                self.main_engine.write_log(
+                    _("微信会话已过期，请通过菜单重新扫码绑定"),
+                    self.engine_name,
+                )
+            except WeixinError as exc:
+                self.pending_msgs = msgs + self.pending_msgs
+                self.main_engine.write_log(
+                    _("微信推送失败：{}").format(exc),
+                    self.engine_name,
+                )
+
+    def close(self) -> None:
+        """"""
+        self.deactivate()

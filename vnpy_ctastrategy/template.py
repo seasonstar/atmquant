@@ -30,7 +30,7 @@ class CtaTemplate(ABC):
 
         self.inited: bool = False
         self.trading: bool = False
-        self.pos: int = 0
+        self.pos: float = 0
 
         # Copy a new variables list here to avoid duplicate insert when multiple
         # strategy instances are created with the same strategy class.
@@ -323,12 +323,14 @@ class CtaTemplate(ABC):
         if self.inited:
             self.cta_engine.put_strategy_event(self)
 
-    def send_email(self, msg: str) -> None:
+    def send_notification(self, msg: str) -> None:
         """
-        Send email to default receiver.
+        Push notification through all configured channels.
         """
         if self.inited:
-            self.cta_engine.send_email(msg, self)
+            self.cta_engine.send_notification(msg, self)
+
+    send_email = send_notification
 
     def sync_data(self) -> None:
         """
@@ -371,8 +373,8 @@ class TargetPosTemplate(CtaTemplate):
     """"""
     tick_add = 1
 
-    last_tick: TickData = None
-    last_bar: BarData = None
+    last_tick: TickData | None = None
+    last_bar: BarData | None = None
     target_pos = 0
 
     def __init__(
@@ -447,8 +449,8 @@ class TargetPosTemplate(CtaTemplate):
         if not pos_change:
             return
 
-        long_price = 0
-        short_price = 0
+        long_price: float = 0
+        short_price: float = 0
 
         if self.last_tick:
             if pos_change > 0:
@@ -460,7 +462,7 @@ class TargetPosTemplate(CtaTemplate):
                 if self.last_tick.limit_down:
                     short_price = max(short_price, self.last_tick.limit_down)
 
-        else:
+        elif self.last_bar:
             if pos_change > 0:
                 long_price = self.last_bar.close_price + self.tick_add
             else:

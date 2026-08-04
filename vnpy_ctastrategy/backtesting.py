@@ -14,7 +14,6 @@ from pandas import DataFrame, Series
 from pandas.core.window import ExponentialMovingWindow
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
 from vnpy.trader.constant import (
     Direction,
     Offset,
@@ -189,7 +188,7 @@ class BacktestingEngine:
             end = min(end, self.end)  # Make sure end time stays within set range
 
             if self.mode == BacktestingMode.BAR:
-                data: list[BarData] = load_bar_data(
+                data: list[BarData] | list[TickData] = load_bar_data(
                     self.symbol,
                     self.exchange,
                     self.interval,
@@ -258,6 +257,9 @@ class BacktestingEngine:
 
         # Add trade data into daily reuslt.
         for trade in self.trades.values():
+            if not trade.datetime:
+                continue
+
             d: Date = trade.datetime.date()
             daily_result: DailyResult = self.daily_results[d]
             daily_result.add_trade(trade)
@@ -339,6 +341,7 @@ class BacktestingEngine:
         sharpe_ratio: float = 0
         ewm_sharpe: float = 0
         return_drawdown_ratio: float = 0
+        rgr_ratio: float = 0
 
         # Check if balance is always positive
         positive_balance: bool = False
@@ -350,7 +353,7 @@ class BacktestingEngine:
             # When balance falls below 0, set daily return to 0
             pre_balance: Series = df["balance"].shift(1)
             pre_balance.iloc[0] = self.capital
-            x = df["balance"] / pre_balance
+            x: Series = df["balance"] / pre_balance
             x[x <= 0] = np.nan
             df["return"] = np.log(x).fillna(0)
 
@@ -359,7 +362,7 @@ class BacktestingEngine:
             df["ddpercent"] = df["drawdown"] / df["highlevel"] * 100
 
             # All balance value needs to be positive
-            positive_balance = (df["balance"] > 0).all()
+            positive_balance = bool((df["balance"] > 0).all())
             if not positive_balance:
                 self.output(_("回测中出现爆仓（资金小于等于0），无法计算策略统计指标"))
 
@@ -379,7 +382,7 @@ class BacktestingEngine:
             max_drawdown_end = df["drawdown"].idxmin()
 
             if isinstance(max_drawdown_end, Date):
-                max_drawdown_start = df["balance"][:max_drawdown_end].idxmax()      # type: ignore
+                max_drawdown_start = df["balance"][:max_drawdown_end].idxmax()
                 max_drawdown_duration = (max_drawdown_end - max_drawdown_start).days
             else:
                 max_drawdown_duration = 0
@@ -421,6 +424,34 @@ class BacktestingEngine:
             else:
                 return_drawdown_ratio = 0
 
+            # Calculate GRR indicator
+            cagr_value: float = annual_return / 100
+
+            if return_std > 0:
+                stability_return: float = 1 / (1 + return_std / 100)
+            else:
+                stability_return = 0
+
+            returns_series: Series = df["return"]
+            downside_diff: np.ndarray = np.minimum(returns_series.values, 0.0)
+            downside_std: float = np.sqrt(np.mean(downside_diff ** 2))
+            annual_downside_risk: float = downside_std * np.sqrt(252)
+            return_skew: float = cast(float, returns_series.skew())
+            return_kurt: float = cast(float, returns_series.kurt())
+            sorted_returns: np.ndarray = np.sort(returns_series.values)
+            cutoff_index: int = int(np.ceil(len(sorted_returns) * 0.05))
+            cvar_95: float = np.mean(sorted_returns[:cutoff_index])
+
+            rgr_ratio = calc_rgr_ratio(
+                cagr_value,
+                stability_return,
+                annual_downside_risk,
+                max_ddpercent,
+                return_skew,
+                return_kurt,
+                cvar_95
+            )
+
         # Output
         if output:
             self.output("-" * 30)
@@ -457,6 +488,7 @@ class BacktestingEngine:
             self.output(f"Sharpe Ratio：\t{sharpe_ratio:,.2f}")
             self.output(f"EWM Sharpe：\t{ewm_sharpe:,.2f}")
             self.output(_("收益回撤比：\t{:,.2f}").format(return_drawdown_ratio))
+            self.output(f"RGR Ratio：\t{rgr_ratio:,.2f}")
 
         # Calculate enhanced trade statistics
         from .enhanced_backtesting import (
@@ -543,6 +575,7 @@ class BacktestingEngine:
             "sharpe_ratio": sharpe_ratio,
             "ewm_sharpe": ewm_sharpe,
             "return_drawdown_ratio": return_drawdown_ratio,
+            "rgr_ratio": rgr_ratio,
             # Enhanced trade statistics
             **trade_statistics,
             # Advanced risk metrics
@@ -997,7 +1030,7 @@ class BacktestingEngine:
         self.active_limit_orders[order.vt_orderid] = order
         self.limit_orders[order.vt_orderid] = order
 
-        return order.vt_orderid     # type: ignore
+        return order.vt_orderid
 
     def cancel_order(self, strategy: CtaTemplate, vt_orderid: str) -> None:
         """
@@ -1045,9 +1078,9 @@ class BacktestingEngine:
         msg = f"{self.datetime}\t{msg}"
         self.logs.append(msg)
 
-    def send_email(self, msg: str, strategy: CtaTemplate | None = None) -> None:
+    def send_notification(self, msg: str, strategy: CtaTemplate | None = None) -> None:
         """
-        Send email to default receiver.
+        Send notification to default receiver.
         """
         pass
 
@@ -1250,7 +1283,7 @@ def load_bar_data(
     """"""
     database: BaseDatabase = get_database()
 
-    return database.load_bar_data(symbol, exchange, interval, start, end)       # type: ignore
+    return database.load_bar_data(symbol, exchange, interval, start, end)
 
 
 @lru_cache(maxsize=999)
@@ -1263,7 +1296,7 @@ def load_tick_data(
     """"""
     database: BaseDatabase = get_database()
 
-    return database.load_tick_data(symbol, exchange, start, end)       # type: ignore
+    return database.load_tick_data(symbol, exchange, start, end)
 
 
 def evaluate(
@@ -1331,7 +1364,48 @@ def wrap_evaluate(engine: BacktestingEngine, target_name: str) -> Callable:
     return func
 
 
-def get_target_value(result: list) -> float:
+def calc_rgr_ratio(
+    cagr_value: float,
+    stability_return: float,
+    annual_downside_risk: float,
+    max_drawdown_percent: float,
+    return_skew: float,
+    return_kurt: float,
+    c_var: float
+) -> float:
+    """"""
+    # Apply log for diminishing marginal utility
+    if cagr_value > 0:
+        gain: float = np.log(1 + cagr_value)
+    else:
+        gain = -np.log(1 - cagr_value)
+
+    # Skewness adjustment factor
+    skew_factor: float = 1 + 0.1 * np.tanh(return_skew)
+
+    # Kurtosis penalty for fat tail
+    kurt_factor: float = 1 / (1 + 0.05 * max(return_kurt - 3, 0))
+
+    # Combined risk calculation
+    downside_risk: float = max(annual_downside_risk, 1e-6)
+    max_dd: float = abs(max_drawdown_percent) / 100.0
+    if c_var != 0:
+        cvar_risk: float = abs(c_var)
+    else:
+        cvar_risk = max_dd * 0.5
+    combined_risk: float = 0.5 * downside_risk + 0.3 * max_dd + 0.2 * cvar_risk
+
+    # Prevent division by zero
+    if combined_risk < 1e-9:
+        combined_risk = 1e-9
+
+    # Final RGR calculation
+    rgr_ratio: float = (gain * stability_return * skew_factor * kurt_factor) / combined_risk
+
+    return rgr_ratio
+
+
+def get_target_value(result: list | tuple) -> float:
     """
     Get target value for sorting optimization results.
     """

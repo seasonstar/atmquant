@@ -1,10 +1,11 @@
 from collections import defaultdict
-from typing import Any
 from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
+from types import CodeType
 from tzlocal import get_localzone_name
 from dataclasses import dataclass
+from decimal import Decimal
 
 from vnpy.trader.object import (
     HistoryRequest, TickData, PositionData, TradeData, ContractData, BarData
@@ -45,7 +46,7 @@ class LegData:
         self.net_pos_price: float = 0       # Average entry price of net position
 
         # Tick data buf
-        self.tick: TickData = None
+        self.tick: TickData | None = None
 
         # Contract data
         self.size: float = 0
@@ -188,8 +189,8 @@ class SpreadData:
         self.bid_volume: float = 0
         self.ask_volume: float = 0
 
-        self.long_pos: int = 0
-        self.short_pos: int = 0
+        self.long_pos: float = 0
+        self.short_pos: float = 0
         self.net_pos: float = 0
 
         self.datetime: datetime = datetime.now(LOCAL_TZ)
@@ -203,7 +204,7 @@ class SpreadData:
 
         # 实盘时编译公式，加速计算
         if compile_formula:
-            self.price_code: Any = compile(price_formula, __name__, "eval")
+            self.price_code: CodeType | str = compile(price_formula, __name__, "eval")
         # 回测时不编译公式，从而支持多进程优化
         else:
             self.price_code = price_formula
@@ -250,22 +251,24 @@ class SpreadData:
             leg_bid_volume: float = leg.bid_volume
             leg_ask_volume: float = leg.ask_volume
 
+            abs_multiplier: int = abs(trading_multiplier)
+
             if trading_multiplier > 0:
                 adjusted_bid_volume: float = floor_to(
-                    leg_bid_volume / trading_multiplier,
+                    decimal_divide(leg_bid_volume, abs_multiplier),
                     self.min_volume
                 )
                 adjusted_ask_volume: float = floor_to(
-                    leg_ask_volume / trading_multiplier,
+                    decimal_divide(leg_ask_volume, abs_multiplier),
                     self.min_volume
                 )
             else:
                 adjusted_bid_volume = floor_to(
-                    leg_ask_volume / abs(trading_multiplier),
+                    decimal_divide(leg_ask_volume, abs_multiplier),
                     self.min_volume
                 )
                 adjusted_ask_volume = floor_to(
-                    leg_bid_volume / abs(trading_multiplier),
+                    decimal_divide(leg_bid_volume, abs_multiplier),
                     self.min_volume
                 )
 
@@ -302,19 +305,20 @@ class SpreadData:
 
     def calculate_pos(self) -> None:
         """"""
-        long_pos = 0
-        short_pos = 0
+        long_pos: float = 0
+        short_pos: float = 0
+        pos_inited: bool = False
 
-        for n, leg in enumerate(self.legs.values()):
-            leg_long_pos = 0
-            leg_short_pos = 0
+        for leg in self.legs.values():
+            leg_long_pos: float = 0
+            leg_short_pos: float = 0
 
             trading_multiplier: int = self.trading_multipliers[leg.vt_symbol]
             if not trading_multiplier:
                 continue
 
             net_pos = self.leg_pos[leg.vt_symbol]
-            adjusted_net_pos = net_pos / trading_multiplier
+            adjusted_net_pos = decimal_divide(net_pos, trading_multiplier)
 
             if adjusted_net_pos > 0:
                 adjusted_net_pos = floor_to(adjusted_net_pos, self.min_volume)
@@ -323,9 +327,10 @@ class SpreadData:
                 adjusted_net_pos = ceil_to(adjusted_net_pos, self.min_volume)
                 leg_short_pos = abs(adjusted_net_pos)
 
-            if not n:
+            if not pos_inited:
                 long_pos = leg_long_pos
                 short_pos = leg_short_pos
+                pos_inited = True
             else:
                 long_pos = min(long_pos, leg_long_pos)
                 short_pos = min(short_pos, leg_short_pos)
@@ -352,7 +357,7 @@ class SpreadData:
         """"""
         leg: LegData = self.legs[vt_symbol]
         trading_multiplier: int = self.trading_multipliers[leg.vt_symbol]
-        spread_volume: float = leg_volume / trading_multiplier
+        spread_volume: float = decimal_divide(leg_volume, trading_multiplier)
 
         if spread_volume > 0:
             spread_volume = floor_to(spread_volume, self.min_volume)
@@ -382,10 +387,12 @@ class SpreadData:
         leg: LegData = self.legs[vt_symbol]
         return leg.size
 
-    def parse_formula(self, formula: str, data: dict[str, float]) -> Any:
+    def parse_formula(self, formula: CodeType | str, data: dict[str, float]) -> float:
         """"""
         value = eval(formula, {"__builtins__": {}}, data)
-        return value
+        if not isinstance(value, int | float):
+            raise ValueError(f"Formula must return number, got {type(value).__name__}")
+        return float(value)
 
     def get_item(self) -> "SpreadItem":
         """获取数据对象"""
@@ -453,8 +460,8 @@ def load_bar_data(
     spread_bars: list[BarData] = []
 
     for dt in bars.keys():
-        spread_price = 0
-        spread_value = 0
+        spread_price: float = 0
+        spread_value: float = 0
         spread_available: bool = True
 
         leg_data: dict = {}
@@ -476,9 +483,9 @@ def load_bar_data(
             if pricetick:
                 spread_price = round_to(spread_price, pricetick)
 
-            spread_bar: BarData = BarData(
+            spread_bar: SpreadBarData = SpreadBarData(
                 symbol=spread.name,
-                exchange=exchange.LOCAL,
+                exchange=Exchange.LOCAL,
                 datetime=dt,
                 interval=interval,
                 open_price=spread_price,
@@ -486,8 +493,8 @@ def load_bar_data(
                 low_price=spread_price,
                 close_price=spread_price,
                 gateway_name="SPREAD",
+                value=spread_value
             )
-            spread_bar.value = spread_value
             spread_bars.append(spread_bar)
 
     return spread_bars
@@ -528,6 +535,18 @@ def query_bar_from_datafeed(
     )
     data: list[BarData] = datafeed.query_bar_history(req, output)
     return data
+
+
+def decimal_divide(value: float, divisor: float) -> float:
+    """使用 Decimal 精确除法，避免浮点精度问题。"""
+    return float(Decimal(str(value)) / Decimal(str(divisor)))
+
+
+@dataclass
+class SpreadBarData(BarData):
+    """BarData with spread notional value used by backtesting."""
+
+    value: float = 0
 
 
 @dataclass

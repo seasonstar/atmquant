@@ -104,3 +104,8 @@ config/ai_prompts_config.py
 scripts/run_ai_backtest.py
 scripts/test_ai_backtest.py
 scripts/test_ai_backtest_core.py
+
+# IDE / tool temp
+.zcode/
+.kiro/
+.claude/
