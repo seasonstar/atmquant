@@ -243,6 +243,12 @@ atmquant/                          # 项目根目录
     - 参数自动加载机制与优先级设计
     - 合约号自动归一化与旧格式迁移
 
+25. **[以AI量化为生：25.vnpy 4.4升级实战 - 魔改版框架如何安全跟进上游](https://mp.weixin.qq.com/s/dcbkFPtnBbmsvUJc0jIHeA)**
+    - 通知系统重构：send_email → send_notification（EmailEngine + WechatEngine 微信推送）
+    - CTP拒单状态修复：报单被拒映射为 Status.REJECTED，策略可感知拒单
+    - 价差成交数量精度修复：decimal_divide 精确除法 + 按腿最小变动数量取整
+    - 魔改版框架安全升级三步法：盘家底 → 逐文件合并 → 全量验证
+
 ---
 
 ### 量化指标解码系列（技术指标研究）
