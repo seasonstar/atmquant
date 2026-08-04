@@ -32,6 +32,9 @@ config/*.json
 !config/*.json.example
 config/social_media_local.md
 
+# 发布工具本地状态（csdn-article-publish 生成的 文章→ID 映射，机器本地）
+csdn_article_map.json
+
 # 数据文件 (使用MySQL数据库，不需要本地数据目录)
 *.db
 *.sqlite
