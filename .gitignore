@@ -50,8 +50,21 @@ logs/
 backtests/results/
 backtests/reports/
 
-# 开发文档（开发过程中产生的临时文档）
-docs/
+# 开发文档默认忽略；仅白名单中的使用指南进入版本库
+docs/*
+!docs/README.md
+!docs/futures_data_download.md
+!docs/enhanced_chart_widget_guide.md
+!docs/dual_chart_guide.md
+!docs/QUAD_CHART_GUIDE.md
+!docs/quad_chart_quickstart.md
+!docs/multi_interval_chart_guide.md
+!docs/trading_sessions_guide.md
+!docs/trading_session_simple_guide.md
+!docs/daily_end_and_hour_sessions_guide.md
+!docs/auto_load_indicators_guide.md
+!docs/independent_indicators_guide.md
+!docs/multi_period_trade_lines_guide.md
 
 # IDE
 .vscode/
