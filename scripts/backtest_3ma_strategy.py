@@ -12,7 +12,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from vnpy_ctabacktester import BacktestingEngine
+from vnpy_ctastrategy.backtesting import BacktestingEngine
 from core.strategies.triple_ma_strategy import TripleMaStrategy
 
 

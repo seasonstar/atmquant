@@ -33,7 +33,7 @@ def show_new_symbols():
         print(f"保证金比例: {info['deposit_rate'] * 100:.1f}%")
         print(f"手续费率: {info['rate'] * 10000:.1f}‰")
         print(f"滑点: {info['slippage']}")
-        print(f"交易月份: {info['months']}")
+        print(f"交易月份: {info['active_months']}")
         print(f"优先合约数量: {len(contracts)} 个")
         print(f"优先合约: {', '.join(contracts[:3])}...")
     

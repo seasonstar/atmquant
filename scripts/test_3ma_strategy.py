@@ -68,15 +68,15 @@ def test_strategy_parameters():
         strategy = TripleMaStrategy(MockEngine(), "test_strategy", "rb2501.SHFE", {})
         
         # 检查默认参数
-        assert strategy.short_window == 5
-        assert strategy.mid_window == 20
-        assert strategy.long_window == 60
+        assert strategy.short_window == 7
+        assert strategy.mid_window == 55
+        assert strategy.long_window == 100
         assert strategy.ma_type == "SMA"
-        assert strategy.signal_timeframe == 15
+        assert strategy.signal_timeframe == 5
         assert strategy.trade_timeframe == 5
         assert strategy.stop_loss_pct == 2.0
         assert strategy.take_profit_pct == 4.0
-        assert strategy.trailing_stop_pct == 1.0
+        assert strategy.trailing_stop_pct == 0.5
         
         print("✅ 策略参数验证通过")
         return True

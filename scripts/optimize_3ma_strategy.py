@@ -12,7 +12,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from vnpy_ctabacktester import BacktestingEngine
+from vnpy.trader.optimize import OptimizationSetting
+from vnpy_ctastrategy.backtesting import BacktestingEngine
 from core.strategies.triple_ma_strategy import TripleMaStrategy
 
 
@@ -46,8 +47,13 @@ def run_optimization():
         "take_profit_pct": [3.0, 4.0, 5.0, 6.0],
     }
     
-    # 运行优化
-    engine.run_optimization(params, target_name="sharpe_ratio")
+    # 使用当前引擎的 OptimizationSetting API
+    setting = OptimizationSetting()
+    for name, values in params.items():
+        setting.params[name] = list(values)
+    setting.set_target("sharpe_ratio")
+
+    engine.run_optimization(setting)
     
     # 显示优化结果
     engine.show_chart()
