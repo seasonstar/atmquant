@@ -56,18 +56,8 @@ from ..engine import (
 # ===================================
 # 导入增强功能组件
 # ===================================
-# 导入重新设计的现代化界面（可选）
+# 导入重新设计的现代化界面
 from .redesigned_widget import RedesignedBacktesterManager
-
-# 导入渐进式测试版本（用于排查问题）
-from .test_versions import (
-    TestVersion1,
-    TestVersion2,
-    TestVersion3,
-    TestVersion4,
-    TestVersion5,
-    TestVersion6,
-)
 
 # 导入增强的统计监控器和优化结果显示器
 try:
@@ -2476,23 +2466,6 @@ class BacktesterManager(RedesignedBacktesterManager):
     """
     pass
 
-# 渐进式测试指南（已完成诊断，保留供参考）
-#
-# 通过测试 TestVersion1-6，确认了问题根源：
-# - TestVersion1-5：正常 [OK]
-# - TestVersion6（添加emoji）：闪退 [FAIL]
-#
-# 结论：emoji 字符在 macOS 上触发 bus error
-# 解决方案：移除所有 emoji，使用纯文本
-#
-# 如需重新测试，取消注释以下任一版本：
-# class BacktesterManager(TestVersion1):  # 最小化框架
-# class BacktesterManager(TestVersion2):  # + 表单控件
-# class BacktesterManager(TestVersion3):  # + 选项卡
-# class BacktesterManager(TestVersion4):  # + 图表布局
-# class BacktesterManager(TestVersion5):  # + 深色样式
-# class BacktesterManager(TestVersion6):  # + emoji（会闪退）
-#
-# 或使用原始UI：
+# 如需使用原始UI：
 # class BacktesterManager(OriginalBacktesterManager):
 #     pass
