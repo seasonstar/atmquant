@@ -1,3 +1,8 @@
+"""
+ZeroMQ RPC server.
+"""
+
+import pickle
 import threading
 import traceback
 from time import time
@@ -9,7 +14,9 @@ from .common import HEARTBEAT_TOPIC, HEARTBEAT_INTERVAL
 
 
 class RpcServer:
-    """"""
+    """
+    Server for remote procedure calls over ZeroMQ.
+    """
 
     def __init__(self) -> None:
         """
@@ -36,7 +43,9 @@ class RpcServer:
         self._heartbeat_at: float | None = None
 
     def is_active(self) -> bool:
-        """"""
+        """
+        Return whether the server is active.
+        """
         return self._active
 
     def start(
@@ -75,6 +84,9 @@ class RpcServer:
         self._active = False
 
     def join(self) -> None:
+        """
+        Wait for the server thread to exit.
+        """
         # Wait for RpcServer thread to exit
         if self._thread and self._thread.is_alive():
             self._thread.join()
@@ -93,12 +105,16 @@ class RpcServer:
                 continue
 
             # Receive request data from Reply socket
-            req = self._socket_rep.recv_pyobj()
+            req: tuple[str, tuple[object, ...], dict[str, object]] = self._socket_rep.recv_pyobj()
 
             # Get function name and parameters
+            name: str
+            args: tuple[object, ...]
+            kwargs: dict[str, object]
             name, args, kwargs = req
 
             # Try to get and execute callable function object; capture exception information if it fails
+            e: Exception
             try:
                 func: Callable = self._functions[name]
                 r: object = func(*args, **kwargs)
@@ -118,7 +134,9 @@ class RpcServer:
         Publish data
         """
         with self._lock:
-            self._socket_pub.send_pyobj([topic, data])
+            # Pickle first so a serialization failure cannot leave a partial multipart message.
+            payload: bytes = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
+            self._socket_pub.send_multipart([topic.encode("utf-8"), payload])
 
     def register(self, func: Callable) -> None:
         """

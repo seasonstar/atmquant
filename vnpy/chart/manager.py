@@ -1,3 +1,7 @@
+"""
+Bar data manager for chart widgets.
+"""
+
 from datetime import datetime
 from _collections_abc import dict_keys
 
@@ -7,10 +11,14 @@ from .base import to_int
 
 
 class BarManager:
-    """"""
+    """
+    Store bar data and index mappings for charts.
+    """
 
     def __init__(self) -> None:
-        """"""
+        """
+        Initialize empty bar storage and range caches.
+        """
         self._bars: dict[datetime, BarData] = {}
         self._datetime_index_map: dict[datetime, int] = {}
         self._index_datetime_map: dict[int, datetime] = {}
@@ -23,6 +31,7 @@ class BarManager:
         Update a list of bar data.
         """
         # Put all new bars into dict
+        bar: BarData
         for bar in history:
             self._bars[bar.datetime] = bar
 
@@ -119,6 +128,7 @@ class BarManager:
         max_price: float = first_bar.high_price
         min_price: float = first_bar.low_price
 
+        bar: BarData
         for bar in bar_list[1:]:
             max_price = max(max_price, bar.high_price)
             min_price = min(min_price, bar.low_price)
@@ -152,9 +162,10 @@ class BarManager:
             return 0, 1
 
         first_bar: BarData = bar_list[0]
-        max_volume = first_bar.volume
-        min_volume = 0
+        max_volume: float = first_bar.volume
+        min_volume: float = 0
 
+        bar: BarData
         for bar in bar_list[1:]:
             max_volume = max(max_volume, bar.volume)
 

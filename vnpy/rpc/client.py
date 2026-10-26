@@ -1,3 +1,4 @@
+import pickle
 import threading
 from time import time
 from functools import lru_cache
@@ -27,7 +28,9 @@ class RemoteException(Exception):
 
 
 class RpcClient:
-    """"""
+    """
+    Client for remote procedure calls over ZeroMQ.
+    """
 
     def __init__(self) -> None:
         """Constructor"""
@@ -41,6 +44,7 @@ class RpcClient:
         self._socket_sub: zmq.Socket = self._context.socket(zmq.SUB)
 
         # Set socket option to keepalive
+        socket: zmq.Socket
         for socket in [self._socket_req, self._socket_sub]:
             socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
             socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 60)
@@ -59,6 +63,9 @@ class RpcClient:
         """
         # Perform remote call task
         def dorpc(*args: Any, **kwargs: Any) -> Any:
+            """
+            Perform the remote call and return its result.
+            """
             # Get timeout value from kwargs, default value is 30 seconds
             timeout: int = kwargs.pop("timeout", 30000)
 
@@ -75,7 +82,7 @@ class RpcClient:
                     msg: str = f"Timeout of {timeout}ms reached for {req}"
                     raise RemoteException(msg)
 
-                rep = self._socket_req.recv_pyobj()
+                rep: tuple[bool, object] = self._socket_req.recv_pyobj()
 
             # Return response if successed; Trigger exception if failed
             if rep[0]:
@@ -120,6 +127,9 @@ class RpcClient:
         self._active = False
 
     def join(self) -> None:
+        """
+        Wait for the client thread to exit.
+        """
         # Wait for RpcClient thread to exit
         if self._thread and self._thread.is_alive():
             self._thread.join()
@@ -136,8 +146,14 @@ class RpcClient:
                 self.on_disconnected()
                 continue
 
-            # Receive data from subscribe socket
-            topic, data = self._socket_sub.recv_pyobj(flags=zmq.NOBLOCK)
+            # Receive multipart message for ZMQ topic filtering
+            frames: list = self._socket_sub.recv_multipart(flags=zmq.NOBLOCK)
+
+            if len(frames) != 2:
+                continue
+
+            topic: str = frames[0].decode("utf-8")
+            data: Any = pickle.loads(frames[1])
 
             if topic == HEARTBEAT_TOPIC:
                 self._last_received_ping = data
@@ -160,6 +176,9 @@ class RpcClient:
         Subscribe data
         """
         self._socket_sub.setsockopt_string(zmq.SUBSCRIBE, topic)
+        # A non-empty prefix drops heartbeats, which the 30s disconnect check needs.
+        if not HEARTBEAT_TOPIC.startswith(topic):
+            self._socket_sub.setsockopt_string(zmq.SUBSCRIBE, HEARTBEAT_TOPIC)
 
     def on_disconnected(self) -> None:
         """
