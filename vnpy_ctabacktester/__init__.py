@@ -19,6 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+"""CTA回测应用包。"""
 
 
 from pathlib import Path
@@ -27,17 +28,17 @@ from vnpy.trader.app import BaseApp
 from .engine import BacktesterEngine, APP_NAME
 
 
-all = [
+all: list[str] = [
     "APP_NAME",
     "BacktesterEngine",
     "CtaBacktesterApp",
 ]
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 
 class CtaBacktesterApp(BaseApp):
-    """"""
+    """CTA回测应用。"""
     from .locale import _
 
     app_name: str = APP_NAME

@@ -70,6 +70,20 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
         self._engine_initialized: bool = False
 
         self.init_ui()
+
+        # 记录界面初始值，用于切换到无历史配置的策略时恢复默认
+        self.default_setting: dict = {
+            "vt_symbol": self.symbol_line.text(),
+            "interval": self.interval_combo.currentText(),
+            "start": self.start_date_edit.date().toString("yyyy-MM-dd"),
+            "end": self.end_date_edit.date().toString("yyyy-MM-dd"),
+            "rate": self.rate_line.text(),
+            "slippage": self.slippage_line.text(),
+            "size": self.size_line.text(),
+            "pricetick": self.pricetick_line.text(),
+            "capital": self.capital_line.text(),
+        }
+
         self.register_event()
 
         # 在UI初始化完成后，立即初始化引擎和策略列表（用于填充下拉列表）
@@ -77,6 +91,9 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
         self.ensure_engine_initialized()
 
         self.load_backtesting_setting()
+
+        # 切换策略时自动恢复该策略的历史配置
+        self.class_combo.currentTextChanged.connect(self.on_strategy_changed)
 
         # 初始化对话框（延迟导入避免循环依赖）
         self.trade_dialog = None
@@ -640,31 +657,74 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
         return widget
 
     def load_backtesting_setting(self) -> None:
-        """加载回测设置"""
-        setting: dict = load_json(self.setting_filename)
+        """加载回测配置，支持按策略名存储多组配置"""
+        all_settings: dict = load_json(self.setting_filename)
+        if not all_settings:
+            return
+
+        # 兼容旧版单一配置格式（含 class_name 键的 flat dict）
+        if "class_name" in all_settings:
+            class_name: str = all_settings["class_name"]
+            migrated: dict = {
+                "_last_used": class_name,
+                class_name: {k: v for k, v in all_settings.items() if k != "class_name"}
+            }
+            all_settings = migrated
+            save_json(self.setting_filename, all_settings)
+
+        # 恢复上次使用的策略
+        last_used: str = all_settings.get("_last_used", "")
+        if last_used:
+            idx: int = self.class_combo.findText(last_used)
+            if idx >= 0:
+                self.class_combo.setCurrentIndex(idx)
+
+        # 加载当前策略的配置
+        current_class: str = self.class_combo.currentText()
+        if current_class:
+            self._apply_strategy_setting(all_settings.get(current_class, {}))
+
+    def _apply_strategy_setting(self, setting: dict) -> None:
+        """将配置项应用到界面控件"""
         if not setting:
             return
 
-        self.class_combo.setCurrentIndex(
-            self.class_combo.findText(setting["class_name"])
-        )
+        if "vt_symbol" in setting:
+            self.symbol_line.setText(setting["vt_symbol"])
 
-        self.symbol_line.setText(setting["vt_symbol"])
-
-        self.interval_combo.setCurrentIndex(
-            self.interval_combo.findText(setting["interval"])
-        )
+        if "interval" in setting:
+            self.interval_combo.setCurrentIndex(
+                self.interval_combo.findText(setting["interval"])
+            )
 
         start_str: str = setting.get("start", "")
         if start_str:
             start_dt: QtCore.QDate = QtCore.QDate.fromString(start_str, "yyyy-MM-dd")
             self.start_date_edit.setDate(start_dt)
 
-        self.rate_line.setText(str(setting["rate"]))
-        self.slippage_line.setText(str(setting["slippage"]))
-        self.size_line.setText(str(setting["size"]))
-        self.pricetick_line.setText(str(setting["pricetick"]))
-        self.capital_line.setText(str(setting["capital"]))
+        end_str: str = setting.get("end", "")
+        if end_str:
+            end_dt: QtCore.QDate = QtCore.QDate.fromString(end_str, "yyyy-MM-dd")
+            self.end_date_edit.setDate(end_dt)
+
+        if "rate" in setting:
+            self.rate_line.setText(str(setting["rate"]))
+        if "slippage" in setting:
+            self.slippage_line.setText(str(setting["slippage"]))
+        if "size" in setting:
+            self.size_line.setText(str(setting["size"]))
+        if "pricetick" in setting:
+            self.pricetick_line.setText(str(setting["pricetick"]))
+        if "capital" in setting:
+            self.capital_line.setText(str(setting["capital"]))
+
+    def on_strategy_changed(self, class_name: str) -> None:
+        """切换策略时恢复该策略配置；没有记录时回到界面初始值。"""
+        if not class_name:
+            return
+
+        all_settings: dict = load_json(self.setting_filename)
+        self._apply_strategy_setting(all_settings.get(class_name) or self.default_setting)
 
     def register_event(self) -> None:
         """注册事件"""
@@ -997,9 +1057,8 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
             self.write_log(_("本地代码的交易所后缀不正确，请检查"))
             return
 
-        # Save backtesting parameters
+        # Save backtesting parameters (按策略名分组存储)
         backtesting_setting: dict = {
-            "class_name": class_name,
             "vt_symbol": vt_symbol,
             "interval": interval,
             "start": start.strftime("%Y-%m-%d"),
@@ -1009,7 +1068,10 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
             "pricetick": pricetick,
             "capital": capital
         }
-        save_json(self.setting_filename, backtesting_setting)
+        all_settings: dict = load_json(self.setting_filename)
+        all_settings[class_name] = backtesting_setting
+        all_settings["_last_used"] = class_name
+        save_json(self.setting_filename, all_settings)
 
         # Get strategy setting
         from .widget import BacktestingSettingEditor
@@ -1051,9 +1113,9 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
             # result_button在回测时不需要禁用，因为它只与优化相关
 
     def save_backtesting_setting(self) -> None:
-        """保存回测设置"""
-        setting = {
-            "class_name": self.class_combo.currentText(),
+        """保存回测设置（按策略名分组存储）"""
+        class_name: str = self.class_combo.currentText()
+        setting: dict = {
             "vt_symbol": self.symbol_line.text(),
             "interval": self.interval_combo.currentText(),
             "start": self.start_date_edit.date().toString("yyyy-MM-dd"),
@@ -1064,7 +1126,10 @@ class RedesignedBacktesterManager(QtWidgets.QWidget):
             "pricetick": float(self.pricetick_line.text()),
             "capital": float(self.capital_line.text()),
         }
-        save_json(self.setting_filename, setting)
+        all_settings: dict = load_json(self.setting_filename)
+        all_settings[class_name] = setting
+        all_settings["_last_used"] = class_name
+        save_json(self.setting_filename, all_settings)
 
     def start_optimization(self) -> None:
         """开始参数优化"""
