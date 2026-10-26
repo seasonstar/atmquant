@@ -9,6 +9,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -16,7 +18,16 @@ sys.path.insert(0, str(project_root))
 from vnpy.event import EventEngine
 from vnpy.trader.engine import MainEngine
 from vnpy_ctp import CtpGateway
-from config.plugin_settings import CURRENT_CTP_SETTINGS
+
+try:
+    from config.plugin_settings import CURRENT_CTP_SETTINGS
+except ImportError:
+    CURRENT_CTP_SETTINGS = None
+
+pytestmark = pytest.mark.skipif(
+    CURRENT_CTP_SETTINGS is None,
+    reason="缺少 config/plugin_settings.py（含SimNow账户配置），跳过CTP连接测试",
+)
 
 def test_ctp_connection():
     """测试CTP连接"""
