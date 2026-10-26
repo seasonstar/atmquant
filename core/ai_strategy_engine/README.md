@@ -116,35 +116,22 @@ INDICATOR_THRESHOLDS = {
 ### 单品种AI策略
 
 ```python
-from core.strategies.ai_enhanced_strategy import AIEnhancedStrategy
+from core.strategies.single_symbol_ai_strategy import SingleSymbolAIStrategy
 
-# 在策略配置中使用（参数会使用配置文件的默认值）
+# 在回测引擎或CTA引擎的策略配置中使用
 strategy_setting = {
-    "ai_model": "gpt-3.5-turbo",
+    "ai_model": "deepseek-chat",
     "api_key": "your-api-key",
-    # 以下参数会使用配置文件的默认值
-    # "decision_interval": 5,        # 来自 AI_CONFIG
-    # "max_position_size": 0.3,      # 来自 RISK_LIMITS
-    # "min_confidence": 0.5,         # 来自 RISK_LIMITS
-    # "stop_loss_pct": 0.02,         # 来自 TRADING_MODES
-    # "take_profit_pct": 0.05,       # 来自 TRADING_MODES
+    "primary_timeframe": "1h",
+    "secondary_timeframe": "15m",
+    "decision_interval": 1,
+    "trading_mode": "conservative",
+    "max_position_size": 0.3,
+    "enable_cache": True,
 }
 ```
 
-### 多品种AI策略
-
-```python
-from core.strategies.ai_multi_symbol_strategy import AIMultiSymbolStrategy
-
-# 自动选择活跃合约进行交易
-strategy_setting = {
-    "ai_model": "gpt-3.5-turbo",
-    "api_key": "your-api-key",
-    "max_positions": 3,           # 最多持有3个品种
-    "enable_selection": True,     # 启用品种选择
-    "decision_interval": 5,
-}
-```
+回测模式下，策略通过 `BacktestAdapter` 复用统一AI引擎并启用决策缓存；`BacktestAdapter` 是策略内部协作者，不是独立的回测入口。
 
 ### 核心引擎使用
 
@@ -341,7 +328,8 @@ GEMINI_API_KEY=your-api-key
 
 ## 相关文档
 
-- [AI回测模块](../ai_backtester/README.md)
+- [AI回测适配器](backtest_adapter.py)
+- [AI缓存](cache.py)
 - [AI客户端](../ai_clients/README.md)
 - [策略基类](../strategies/base_strategy.py)
 - [配置管理](../../config/)

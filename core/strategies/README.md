@@ -12,7 +12,7 @@ core/strategies/
 ├── base_strategy.py              # 基础策略类（推荐使用）
 ├── base_cta_strategy_v2.py       # V2版本基础策略类（旧版）
 ├── triple_ma_strategy.py         # 三均线策略示例
-├── ai_agent_strategy.py          # AI代理策略
+├── single_symbol_ai_strategy.py   # 单品种AI策略（统一AI引擎）
 ├── atm_strategy_for_ni_v2.py     # 镍期货专用策略V2
 └── README.md                     # 本文件
 ```
@@ -97,9 +97,9 @@ class MyStrategy(BaseCtaStrategy):
 - **做多信号**: 短期MA向上穿过中期MA，且交叉点位于长期MA上方
 - **做空信号**: 短期MA向下穿过中期MA，且交叉点位于长期MA下方
 
-### AI代理策略 (AIAgentStrategy)
+### 单品种AI策略 (SingleSymbolAIStrategy)
 
-基于AI代理的智能交易策略，集成了机器学习模型进行交易决策。
+基于统一AI策略引擎的单品种交易策略，回测时通过 `BacktestAdapter` 复用决策与缓存能力。
 
 ### 镍期货专用策略V2 (ATMStrategyForNiV2)
 
@@ -194,7 +194,7 @@ class MyStrategy(BaseCtaStrategy):
 使用vnpy的回测引擎进行策略回测：
 
 ```python
-from vnpy_ctabacktester import BacktestingEngine
+from vnpy_ctastrategy.backtesting import BacktestingEngine
 from vnpy.trader.constant import Interval
 from datetime import datetime
 
@@ -437,7 +437,7 @@ def calculate_position_size(self, bar):
 ### 示例代码
 
 - `triple_ma_strategy.py` - 三均线策略完整实现
-- `ai_agent_strategy.py` - AI代理策略示例
+- `single_symbol_ai_strategy.py` - 单品种AI策略实现
 - `scripts/` - 回测和优化脚本
 
 ### 学习资源
