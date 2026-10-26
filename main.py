@@ -16,7 +16,8 @@ def main():
     """主函数"""
     print("=" * 60)
     print("ATMQuant - AI量化交易系统")
-    print("基于vnpy 4.1框架")
+    import vnpy
+    print(f"基于vnpy {vnpy.__version__}框架")
     print("=" * 60)
     
     # 加载ATMQuant配置
