@@ -13,7 +13,7 @@ from tzlocal import get_localzone_name
 
 
 def load_env_file(env_file: str = ".env") -> None:
-    """加载.env文件到环境变量"""
+    """加载.env文件补充环境变量，不覆盖显式设置的现有值"""
     env_path = Path(env_file)
     if not env_path.exists():
         return
@@ -24,7 +24,7 @@ def load_env_file(env_file: str = ".env") -> None:
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     key, value = line.split('=', 1)
-                    os.environ[key.strip()] = value.strip()
+                    os.environ.setdefault(key.strip(), value.strip())
     except Exception as e:
         print(f"⚠️  加载.env文件失败: {e}")
 

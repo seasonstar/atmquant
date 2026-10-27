@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,20 +30,43 @@ DATAFEED_USERNAME=test_user
         temp_env_file = f.name
     
     try:
-        # 加载配置
-        load_env_file(temp_env_file)
-        
-        # 验证环境变量
-        assert os.getenv("DATABASE_TYPE") == "mysql"
-        assert os.getenv("DATABASE_HOST") == "localhost"
-        assert os.getenv("DATABASE_PORT") == "3306"
-        assert os.getenv("DATAFEED_NAME") == "tqsdk"
-        assert os.getenv("DATAFEED_USERNAME") == "test_user"
-        
+        # 隔离已存在于开发机环境中的同名变量，验证.env只补缺失值
+        with patch.dict(os.environ, {}, clear=False):
+            for key in (
+                "DATABASE_TYPE",
+                "DATABASE_HOST",
+                "DATABASE_PORT",
+                "DATAFEED_NAME",
+                "DATAFEED_USERNAME",
+            ):
+                os.environ.pop(key, None)
+
+            load_env_file(temp_env_file)
+
+            assert os.getenv("DATABASE_TYPE") == "mysql"
+            assert os.getenv("DATABASE_HOST") == "localhost"
+            assert os.getenv("DATABASE_PORT") == "3306"
+            assert os.getenv("DATAFEED_NAME") == "tqsdk"
+            assert os.getenv("DATAFEED_USERNAME") == "test_user"
+
         print("✓ .env文件加载测试通过")
         
     finally:
         # 清理临时文件
+        os.unlink(temp_env_file)
+
+
+def test_env_file_preserves_existing_environment():
+    """显式进程环境变量的优先级必须高于.env文件"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as f:
+        f.write("DATABASE_TYPE=mysql\n")
+        temp_env_file = f.name
+
+    try:
+        with patch.dict(os.environ, {"DATABASE_TYPE": "postgresql"}, clear=False):
+            load_env_file(temp_env_file)
+            assert os.environ["DATABASE_TYPE"] == "postgresql"
+    finally:
         os.unlink(temp_env_file)
 
 
@@ -73,21 +97,23 @@ def test_get_atmquant_settings():
 
 def test_config_priority():
     """测试配置优先级"""
-    # 清除环境变量
-    if "DATABASE_TYPE" in os.environ:
-        del os.environ["DATABASE_TYPE"]
-    
-    # 测试默认配置
-    settings = get_atmquant_settings()
-    assert settings["database.name"] == "sqlite"
-    
-    # 设置环境变量
-    os.environ["DATABASE_TYPE"] = "mysql"
-    
-    # 测试环境变量覆盖
-    settings = get_atmquant_settings()
-    assert settings["database.name"] == "mysql"
-    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        original_cwd = os.getcwd()
+        try:
+            # 在没有.env的目录验证默认值，避免开发机配置影响测试
+            os.chdir(temp_dir)
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("DATABASE_TYPE", None)
+                settings = get_atmquant_settings()
+                assert settings["database.name"] == "sqlite"
+
+                # 显式环境变量覆盖默认值
+                os.environ["DATABASE_TYPE"] = "mysql"
+                settings = get_atmquant_settings()
+                assert settings["database.name"] == "mysql"
+        finally:
+            os.chdir(original_cwd)
+
     print("✓ 配置优先级测试通过")
 
 
@@ -98,6 +124,7 @@ def main():
     
     try:
         test_load_env_file()
+        test_env_file_preserves_existing_environment()
         test_get_atmquant_settings()
         test_config_priority()
         
