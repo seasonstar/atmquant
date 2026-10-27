@@ -172,13 +172,26 @@ class BaseCtaStrategy(CtaTemplate):
             self.logger.warning(f"委托已撤销: {order.direction} {order.volume}@{order.price}")
         super().on_order(order)
         
+    def _is_backtest(self) -> bool:
+        """判断策略是否运行在回测引擎中"""
+        from vnpy_ctastrategy.base import EngineType
+
+        engine_type = getattr(self.cta_engine, "engine_type", None)
+        return engine_type is not None and engine_type == EngineType.BACKTESTING
+
     def send_alert(self, message: str):
-        """发送告警消息"""
+        """发送告警消息（回测模式下仅记录日志）"""
         try:
+            from config.alert_config import ALERT_BACKTEST_ENABLED
+
+            if self._is_backtest() and not ALERT_BACKTEST_ENABLED:
+                self.logger.debug(f"[回测告警·仅记录] {message}")
+                return
+
             alert_manager.send_alert(
                 content=f"📊 策略告警\n策略：{self.strategy_name}\n品种：{self.vt_symbol}\n消息：{message}",
                 symbol=self.vt_symbol,
-                
+
             )
         except Exception as e:
             self.logger.error(f"发送告警失败: {e}")

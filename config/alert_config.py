@@ -20,7 +20,7 @@ def load_env_file(env_file: str = ".env") -> None:
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     key, value = line.split('=', 1)
-                    os.environ[key.strip()] = value.strip()
+                    os.environ.setdefault(key.strip(), value.strip())
     except Exception as e:
         print(f"⚠️  加载.env文件失败: {e}")
 
@@ -31,6 +31,16 @@ load_env_file()
 # 全局告警开关（可通过环境变量 ALERT_ENABLED 控制）
 # 设置为 false 可在回测等场景下禁用所有告警
 ALERT_ENABLED = os.getenv("ALERT_ENABLED", "true").lower() == "true"
+
+# ---- 告警自动防护配置 ----
+# 回测模式下策略告警默认只写日志、不发网络请求；置 true 可恢复发送
+ALERT_BACKTEST_ENABLED = os.getenv("ALERT_BACKTEST_ENABLED", "false").lower() == "true"
+# 客户端限流：每个webhook每10秒最多发送条数（对齐飞书频率限制）
+ALERT_RATE_LIMIT_PER_10S = int(os.getenv("ALERT_RATE_LIMIT_PER_10S", "5"))
+# 永久故障（令牌失效等）熔断时长（秒）
+ALERT_CIRCUIT_COOLDOWN_SECONDS = int(os.getenv("ALERT_CIRCUIT_COOLDOWN_SECONDS", "600"))
+# 飞书限频(9499)后的短退避时长（秒）
+ALERT_RATE_BACKOFF_SECONDS = int(os.getenv("ALERT_RATE_BACKOFF_SECONDS", "15"))
 
 # 飞书配置
 FEISHU_CONFIG = {

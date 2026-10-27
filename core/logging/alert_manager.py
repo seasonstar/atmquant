@@ -14,6 +14,8 @@ import hmac
 import time
 import re
 import atexit
+import threading
+from collections import defaultdict, deque
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict
@@ -22,6 +24,42 @@ from .logger_manager import get_logger
 # 创建线程池执行器，用于异步发送告警
 executor = ThreadPoolExecutor(max_workers=5)
 logger = get_logger(symbol="ALERT")
+
+# 时间与休眠的可注入点（测试中替换为假时钟）
+_now = time.monotonic
+_sleep = time.sleep
+
+# 防护参数默认值；模块尾部的配置加载会覆盖它们
+ALERT_RATE_LIMIT_PER_10S = 5
+ALERT_CIRCUIT_COOLDOWN_SECONDS = 600
+ALERT_RATE_BACKOFF_SECONDS = 15
+
+# 飞书永久性错误码：重试不可能成功
+_FEISHU_PERMANENT_CODES = {19001}
+# 瞬时网络异常的最大重试次数与退避间隔
+_TRANSIENT_RETRIES = 2
+_TRANSIENT_BACKOFFS = (1.0, 5.0)
+_RATE_WINDOW_SECONDS = 10.0
+_RATE_DROP_SUMMARY_SECONDS = 60.0
+
+
+class _Circuit:
+    """单个webhook的熔断状态"""
+
+    def __init__(self, opened_at: float, cooldown: float, reason: str):
+        self.opened_at = opened_at
+        self.cooldown = cooldown
+        self.reason = reason
+        self.suppressed = 0
+
+    def is_open(self) -> bool:
+        return _now() < self.opened_at + self.cooldown
+
+
+def _mask_webhook(webhook: str) -> str:
+    """日志中脱敏展示webhook，只保留末尾片段"""
+    tail = webhook[-8:] if len(webhook) > 8 else webhook
+    return f"...{tail}"
 
 
 def cleanup_executor():
@@ -45,6 +83,13 @@ class AlertManager:
         self.hook_secret_map: Dict[str, str] = {}  # webhook到密钥映射
         self.default_webhook = ""
         self.default_secret = ""
+
+        # 限流与熔断状态（按webhook隔离，线程安全）
+        self._lock = threading.Lock()
+        self._send_times: Dict[str, deque] = defaultdict(deque)
+        self._circuits: Dict[str, _Circuit] = {}
+        self._rate_dropped: Dict[str, int] = defaultdict(int)
+        self._last_rate_log: Dict[str, float] = {}
 
     def configure(
         self,
@@ -108,6 +153,147 @@ class AlertManager:
 
         return True
 
+    def _acquire_send_slot(self, webhook: str) -> bool:
+        """令牌桶限流：每10秒窗口内每个webhook最多ALERT_RATE_LIMIT_PER_10S条
+
+        超限的发送被丢弃并计数，每60秒聚合输出一条摘要日志。
+        """
+        with self._lock:
+            now = _now()
+            times = self._send_times[webhook]
+            while times and times[0] <= now - _RATE_WINDOW_SECONDS:
+                times.popleft()
+
+            if len(times) >= ALERT_RATE_LIMIT_PER_10S:
+                self._rate_dropped[webhook] += 1
+                dropped = self._rate_dropped[webhook]
+                last_log = self._last_rate_log.get(webhook, 0.0)
+                if now - last_log >= _RATE_DROP_SUMMARY_SECONDS:
+                    logger.warning(
+                        f"飞书告警限流：过去{_RATE_DROP_SUMMARY_SECONDS:.0f}秒丢弃 "
+                        f"{dropped} 条发送到 {_mask_webhook(webhook)}，"
+                        f"配额为每{_RATE_WINDOW_SECONDS:.0f}秒{ALERT_RATE_LIMIT_PER_10S}条"
+                    )
+                    self._rate_dropped[webhook] = 0
+                    self._last_rate_log[webhook] = now
+                return False
+
+            times.append(now)
+            return True
+
+    def _circuit_blocks(self, webhook: str) -> bool:
+        """熔断器：冷却期内静默跳过；冷却结束放行一条作为探测"""
+        with self._lock:
+            circuit = self._circuits.get(webhook)
+            if circuit is None:
+                return False
+            if circuit.is_open():
+                circuit.suppressed += 1
+                return True
+            return False
+
+    def _open_circuit(self, webhook: str, reason: str, cooldown: float) -> None:
+        """打开熔断：仅在从关闭到打开的瞬间输出一条错误日志"""
+        with self._lock:
+            existing = self._circuits.get(webhook)
+            if existing is not None and existing.is_open():
+                existing.suppressed += 1
+                return
+            self._circuits[webhook] = _Circuit(_now(), cooldown, reason)
+
+        if cooldown >= ALERT_CIRCUIT_COOLDOWN_SECONDS:
+            logger.error(
+                f"飞书告警熔断{cooldown:.0f}秒：{reason}（webhook: "
+                f"{_mask_webhook(webhook)}）。请检查 FEISHU_DEFAULT_WEBHOOK 等"
+                f"配置是否有效，冷却结束后将自动探测恢复"
+            )
+        else:
+            logger.warning(f"飞书告警暂停{cooldown:.0f}秒：{reason}")
+
+    def _clear_circuit(self, webhook: str) -> None:
+        """发送成功后清除熔断状态"""
+        with self._lock:
+            self._circuits.pop(webhook, None)
+
+    def _send_now(self, webhook: str, secret: str, content: str) -> None:
+        """同步执行单条告警的防护检查与发送（由线程池调用）"""
+        if not self._acquire_send_slot(webhook):
+            return
+
+        if self._circuit_blocks(webhook):
+            logger.debug(f"告警熔断中，跳过发送: {content[:50]}...")
+            return
+
+        timestamp = int(time.time())
+        signature = self._generate_signature(timestamp, secret)
+        headers = {"Content-Type": "application/json; charset=utf-8"}
+        payload = {
+            "timestamp": timestamp,
+            "sign": signature,
+            "msg_type": "text",
+            "content": {"text": content},
+        }
+
+        attempt = 0
+        while True:
+            try:
+                response = requests.post(
+                    url=webhook,
+                    data=json.dumps(payload),
+                    headers=headers,
+                    timeout=10
+                )
+                try:
+                    result = response.json()
+                except ValueError:
+                    body_preview = (response.text or "")[:100]
+                    reason = f"响应非JSON HTTP {response.status_code}: {body_preview}"
+                    if response.status_code >= 500:
+                        # 网关瞬时异常：退避重试，持续失败则熔断
+                        if attempt < _TRANSIENT_RETRIES:
+                            attempt += 1
+                            _sleep(_TRANSIENT_BACKOFFS[attempt - 1])
+                            continue
+                        self._open_circuit(webhook, reason, ALERT_CIRCUIT_COOLDOWN_SECONDS)
+                    else:
+                        self._open_circuit(webhook, reason, ALERT_CIRCUIT_COOLDOWN_SECONDS)
+                    return
+
+                code = result.get("code", 0)
+                msg = str(result.get("msg", ""))
+
+                if result.get("msg") == "success" or code == 0:
+                    logger.debug(f"飞书告警响应: {result}")
+                    logger.success(f"飞书告警发送成功: {content[:50]}...")
+                    self._clear_circuit(webhook)
+                    return
+
+                if code == 9499 or "too many request" in msg.lower():
+                    # 飞书限频：当前消息不重试，短退避后自然恢复
+                    self._open_circuit(webhook, f"飞书限频(9499)", ALERT_RATE_BACKOFF_SECONDS)
+                    return
+
+                if code in _FEISHU_PERMANENT_CODES or "invalid" in msg.lower():
+                    self._open_circuit(
+                        webhook,
+                        f"飞书拒绝 code={code} msg={msg}，webhook令牌可能失效",
+                        ALERT_CIRCUIT_COOLDOWN_SECONDS,
+                    )
+                    return
+
+                # 未知错误：记录一次，不重试不熔断，避免放大请求
+                logger.warning(f"飞书告警未成功(不重试): {result}")
+                return
+
+            except requests.RequestException as e:
+                # 网络瞬时异常：退避重试，重试耗尽后单条日志放弃
+                if attempt < _TRANSIENT_RETRIES:
+                    attempt += 1
+                    _sleep(_TRANSIENT_BACKOFFS[attempt - 1])
+                    continue
+                logger.error(f"飞书告警网络异常，已重试{attempt}次后放弃: {e}")
+                return
+
     def send_alert(
         self,
         content: str,
@@ -153,51 +339,7 @@ class AlertManager:
                     logger.error("飞书webhook或密钥未配置")
                     return
 
-                # 生成签名
-                timestamp = int(time.time())
-                signature = self._generate_signature(timestamp, secret)
-
-                # 构造消息
-                headers = {
-                    "Content-Type": "application/json; charset=utf-8"
-                }
-
-                payload = {
-                    "timestamp": timestamp,
-                    "sign": signature,
-                    "msg_type": "text",
-                    "content": {
-                        "text": content
-                    }
-                }
-
-                # 发送请求，最多重试3次
-                for attempt in range(3):
-                    try:
-                        response = requests.post(
-                            url=webhook_url,
-                            data=json.dumps(payload),
-                            headers=headers,
-                            timeout=10
-                        )
-
-                        result = response.json()
-                        logger.debug(f"飞书告警响应: {result}")
-
-                        if result.get('msg') == 'success':
-                            logger.success(f"飞书告警发送成功: {content[:50]}...")
-                            break
-                        else:
-                            logger.warning(f"飞书告警发送失败: {result}")
-
-                    except Exception as e:
-                        logger.error(f"飞书告警发送异常 (尝试 {attempt + 1}/3): {e}")
-                        if attempt < 2:  # 不是最后一次尝试
-                            time.sleep(5)
-                        continue
-
-                # 每处理完一个任务后等待1秒钟
-                time.sleep(1)
+                self._send_now(webhook_url, secret, content)
 
             except Exception as e:
                 logger.error(f"飞书告警处理异常: {e}")
@@ -223,3 +365,16 @@ try:
         )
 except Exception as e:
     logger.warning(f"加载告警配置失败: {e}")
+
+# 用配置文件中的防护参数覆盖模块默认值
+try:
+    from config.alert_config import (  # noqa: E402
+        ALERT_RATE_LIMIT_PER_10S as _CFG_RATE_LIMIT,
+        ALERT_CIRCUIT_COOLDOWN_SECONDS as _CFG_CIRCUIT,
+        ALERT_RATE_BACKOFF_SECONDS as _CFG_BACKOFF,
+    )
+    ALERT_RATE_LIMIT_PER_10S = _CFG_RATE_LIMIT
+    ALERT_CIRCUIT_COOLDOWN_SECONDS = _CFG_CIRCUIT
+    ALERT_RATE_BACKOFF_SECONDS = _CFG_BACKOFF
+except Exception as e:
+    logger.warning(f"加载告警防护配置失败，使用默认值: {e}")
