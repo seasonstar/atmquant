@@ -27,8 +27,8 @@ logger = get_logger(symbol="ALERT")
 def cleanup_executor():
     """清理线程池，防止信号量泄漏"""
     try:
+        # 退出阶段不再新增日志，避免写入已关闭的控制台捕获流
         executor.shutdown(wait=False)
-        logger.debug("Alert manager thread pool cleaned up")
     except Exception:
         pass
 

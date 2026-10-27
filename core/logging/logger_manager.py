@@ -126,12 +126,11 @@ class LoggerManager:
             raise  # 重新抛出异常，确保初始化失败时能够被捕获
     
     def _cleanup(self):
-        """程序退出时的清理函数"""
+        """程序退出时等待日志写完，再关闭所有handler"""
         try:
-            logger.info("程序正在关闭，等待日志写入完成...")
-            # 确保所有日志都被写入
             logger.complete()
-            logger.info("日志系统已安全关闭")
+            # remove会停止并关闭handler；退出清理结束后不能再写日志
+            logger.remove()
         except Exception as e:
             print(f"关闭日志系统时发生错误: {e}")
     
