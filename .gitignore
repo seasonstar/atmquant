@@ -125,3 +125,8 @@ scripts/test_ai_backtest_core.py
 .zcode/
 .kiro/
 .claude/
+.gstack/
+
+# 个人 AI/ML 学习计划、研究记录与生成产物（仅保留本地）
+/research/
+/.ml4t-daily/
