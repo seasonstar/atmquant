@@ -1520,6 +1520,9 @@ class CandleChartDialog(QtWidgets.QDialog):
 
         self.items: list = []
 
+        # 双图/四图上已绘制的交易图形项，按candle_plot的id跟踪，重绘前清理
+        self._chart_trade_items: dict = {}
+
         # 保存原始交易数据用于多周期切换
         self.trade_data: list = []
 
@@ -1848,6 +1851,48 @@ class CandleChartDialog(QtWidgets.QDialog):
 
         return closest_ix
 
+    @staticmethod
+    def _make_trade_pair_items(
+        direction: Direction,
+        open_ix: int,
+        close_ix: int,
+        open_price: float,
+        close_price: float,
+    ) -> tuple[QtWidgets.QGraphicsRectItem, pg.PlotCurveItem]:
+        """生成交易对的盈亏区域色块与连线（TradingView持仓风格）"""
+        if (
+            direction == Direction.LONG and close_price >= open_price
+        ) or (
+            direction == Direction.SHORT and close_price <= open_price
+        ):
+            color: QtGui.QColor = QtGui.QColor("#F6465D")  # 盈利红
+        else:
+            color = QtGui.QColor("#2EBD85")  # 亏损绿
+
+        # 区域色块负责显眼：低透明度覆盖开平仓之间的价格区间，不遮挡K线
+        fill_color: QtGui.QColor = QtGui.QColor(color)
+        fill_color.setAlpha(55)
+        fill: QtWidgets.QGraphicsRectItem = QtWidgets.QGraphicsRectItem(
+            QtCore.QRectF(
+                open_ix,
+                min(open_price, close_price),
+                close_ix - open_ix,
+                abs(close_price - open_price),
+            )
+        )
+        fill.setPen(pg.mkPen(None))
+        fill.setBrush(pg.mkBrush(fill_color))
+
+        # 实线负责精确：圆角端点，避免高线宽虚线的碎块感
+        pen: QtGui.QPen = pg.mkPen(color, width=4)
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+        curve: pg.PlotCurveItem = pg.PlotCurveItem(
+            [open_ix, close_ix], [open_price, close_price], pen=pen
+        )
+
+        return fill, curve
+
     def update_trades(self, trades: list) -> None:
         """
         更新交易数据并绘制买卖点连线（支持多周期）
@@ -1880,23 +1925,14 @@ class CandleChartDialog(QtWidgets.QDialog):
             open_price = d["open_price"]
             close_price = d["close_price"]
 
-            # Trade Line
-            x: list = [open_ix, close_ix]
-            y: list = [open_price, close_price]
-
-            if d["direction"] == Direction.LONG and close_price >= open_price:
-                color: str = "r"
-            elif d["direction"] == Direction.SHORT and close_price <= open_price:
-                color = "r"
-            else:
-                color = "g"
-
-            # 加粗连线，使用更醒目的宽度和样式
-            pen: QtGui.QPen = pg.mkPen(color, width=3, style=QtCore.Qt.PenStyle.DashLine)
-            item: pg.PlotCurveItem = pg.PlotCurveItem(x, y, pen=pen)
-
-            self.items.append(item)
-            candle_plot.addItem(item)
+            # 盈亏区域 + 细实线（TradingView持仓风格）
+            fill, curve = self._make_trade_pair_items(
+                d["direction"], open_ix, close_ix, open_price, close_price
+            )
+            self.items.append(fill)
+            self.items.append(curve)
+            candle_plot.addItem(fill)
+            candle_plot.addItem(curve)
 
             # Trade Scatter
             open_bar: BarData = self.ix_bar_map[open_ix]
@@ -2183,6 +2219,12 @@ class CandleChartDialog(QtWidgets.QDialog):
         if not candle_plot:
             return
 
+        # 先清除该图上旧的交易图形，避免重绘时半透明色块叠加变深
+        for item in self._chart_trade_items.pop(id(candle_plot), []):
+            candle_plot.removeItem(item)
+        chart_trade_items: list = []
+        self._chart_trade_items[id(candle_plot)] = chart_trade_items
+
         # 构建时间索引映射
         dt_ix_map = {}
         ix_bar_map = {}
@@ -2215,21 +2257,14 @@ class CandleChartDialog(QtWidgets.QDialog):
             open_price = d["open_price"]
             close_price = d["close_price"]
 
-            # Trade Line
-            x: list = [open_ix, close_ix]
-            y: list = [open_price, close_price]
-
-            if d["direction"] == Direction.LONG and close_price >= open_price:
-                color: str = "r"
-            elif d["direction"] == Direction.SHORT and close_price <= open_price:
-                color = "r"
-            else:
-                color = "g"
-
-            # 加粗连线
-            pen: QtGui.QPen = pg.mkPen(color, width=3, style=QtCore.Qt.PenStyle.DashLine)
-            item: pg.PlotCurveItem = pg.PlotCurveItem(x, y, pen=pen)
-            candle_plot.addItem(item)
+            # 盈亏区域 + 细实线（TradingView持仓风格）
+            fill, curve = self._make_trade_pair_items(
+                d["direction"], open_ix, close_ix, open_price, close_price
+            )
+            chart_trade_items.append(fill)
+            chart_trade_items.append(curve)
+            candle_plot.addItem(fill)
+            candle_plot.addItem(curve)
 
             # Trade Scatter
             open_bar: BarData = ix_bar_map[open_ix]
@@ -2273,6 +2308,7 @@ class CandleChartDialog(QtWidgets.QDialog):
             }
 
             scatter_item: pg.ScatterPlotItem = pg.ScatterPlotItem([open_scatter, close_scatter])
+            chart_trade_items.append(scatter_item)
             candle_plot.addItem(scatter_item)
 
 
@@ -2365,7 +2401,7 @@ class CandleChartDialog(QtWidgets.QDialog):
         self.updated = False
 
         candle_plot: pg.PlotItem = self.chart.get_plot("candle")
-        item: pg.PlotCurveItem | pg.TextItem | pg.ScatterPlotItem
+        item: pg.PlotCurveItem | pg.TextItem | pg.ScatterPlotItem | QtWidgets.QGraphicsRectItem
         for item in self.items:
             candle_plot.removeItem(item)
         self.items.clear()
