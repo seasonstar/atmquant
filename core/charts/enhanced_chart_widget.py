@@ -52,6 +52,11 @@ EXTENDED_INDICATORS_CONFIG = {
     "squeeze": {"module": "squeeze_momentum_item", "class": "SqueezeMomentumItem", "type": "sub", "default_visible": False, "min_height": 100, "max_height": 180, "configurable": True},
     "supertrended_rsi": {"module": "supertrended_rsi_item", "class": "SupertrendedRsiItem", "type": "sub", "default_visible": True, "min_height": 100, "max_height": 180, "configurable": True},
     "wavetrend": {"module": "wavetrend_item", "class": "WaveTrendItem", "type": "sub", "default_visible": False, "min_height": 100, "max_height": 180, "configurable": True},
+    "logistic_sr": {"module": "logistic_sr_item", "class": "LogisticSrItem", "type": "main", "default_visible": False, "configurable": True},
+    "bayesian_bbsma": {"module": "bayesian_bbsma_item", "class": "BayesianBbsmaItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
+    "nqqe": {"module": "nqqe_item", "class": "NqqeItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
+    "bayesian_q": {"module": "bayesian_q_item", "class": "BayesianQItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
+    "random_forest_forecast": {"module": "random_forest_forecast_item", "class": "RandomForestForecastItem", "type": "main", "default_visible": False, "configurable": True},
 }
 
 # 动态导入扩展指标
@@ -349,6 +354,13 @@ class EnhancedChartWidget(ChartWidget):
             if history:
                 item.update_history(history)
                 item.update()
+            # 指标可声明需要向右延伸的bar数（如随机森林预测器的未来轨迹）
+            extension = int(getattr(item, "preferred_x_extension", 0))
+            if extension > 0:
+                count = self._manager.get_count()
+                target = min(count - 1 + extension, count - 1 + 50)
+                self._right_ix = max(self._right_ix, target)
+                self._update_x_range()
         else:
             if key in self._items:
                 self._plots["candle"].removeItem(self._items[key])
@@ -1006,10 +1018,12 @@ class EnhancedChartWidget(ChartWidget):
         self.current_exchange = exchange
 
     def clear_all(self) -> None:
-        """清空数据"""
-        for item in self._items.values():
-            if hasattr(item, "clear_all"):
-                item.clear_all()
+        """清空 manager、items、cursor 及周期聚合所用的原始分钟线。"""
+
+        super().clear_all()
+        self.base_minute_bars.clear()
+        self._last_tick_volume = 0
+        self._last_tick_volume_for_base = 0
         self.update()
 
     # ==================== 视图控制 ====================
