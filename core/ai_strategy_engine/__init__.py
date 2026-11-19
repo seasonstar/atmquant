@@ -12,18 +12,11 @@ AI策略引擎模块
 - 回测适配器
 """
 
-from .engine import AIStrategyEngine, AIStrategyConfig, DecisionResult
 from .schema.futures_schema import FuturesSchema, FieldDefinition
 from .context.context_builder import ContextBuilder, MultiSymbolContextBuilder
 from .cache import AICache, CachedDecision, compute_cache_key, create_ai_cache
-from .backtest_adapter import BacktestAdapter, detect_backtest_mode
 
 __all__ = [
-    # 核心引擎
-    "AIStrategyEngine",
-    "AIStrategyConfig",
-    "DecisionResult",
-
     # Schema
     "FuturesSchema",
     "FieldDefinition",
@@ -37,8 +30,17 @@ __all__ = [
     "CachedDecision",
     "compute_cache_key",
     "create_ai_cache",
-
-    # 回测适配器
-    "BacktestAdapter",
-    "detect_backtest_mode",
 ]
+
+# 核心引擎与回测适配器为会员专项模块（依赖付费AI客户端），缺失时静默降级
+try:
+    from .engine import AIStrategyEngine, AIStrategyConfig, DecisionResult
+    __all__.extend(["AIStrategyEngine", "AIStrategyConfig", "DecisionResult"])
+except ImportError:
+    pass
+
+try:
+    from .backtest_adapter import BacktestAdapter, detect_backtest_mode
+    __all__.extend(["BacktestAdapter", "detect_backtest_mode"])
+except ImportError:
+    pass

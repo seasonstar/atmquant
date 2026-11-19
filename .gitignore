@@ -222,3 +222,4 @@ scripts/render_xgb_probability_verification.py
 tests/test_hud_auto_attach.py
 tests/test_xgboost_mini_calculator.py
 tests/test_xgboost_mini_strategy.py
+core/strategies/single_symbol_ai_strategy.py
