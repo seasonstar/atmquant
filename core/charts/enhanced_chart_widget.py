@@ -57,6 +57,7 @@ EXTENDED_INDICATORS_CONFIG = {
     "nqqe": {"module": "nqqe_item", "class": "NqqeItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
     "bayesian_q": {"module": "bayesian_q_item", "class": "BayesianQItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
     "random_forest_forecast": {"module": "random_forest_forecast_item", "class": "RandomForestForecastItem", "type": "main", "default_visible": False, "configurable": True},
+    "xgb_probability": {"module": "xgb_probability_item", "class": "XGBProbabilityItem", "type": "sub", "default_visible": False, "min_height": 100, "max_height": 160, "configurable": True},
 }
 
 # 动态导入扩展指标
@@ -354,6 +355,10 @@ class EnhancedChartWidget(ChartWidget):
             if history:
                 item.update_history(history)
                 item.update()
+            # 指标可声明HUD仪表盘（随机森林预测器/逻辑回归支撑阻力等），自动挂到主图
+            attach_hud = getattr(item, "attach_hud", None)
+            if callable(attach_hud) and getattr(item, "hud_item", None) is None:
+                attach_hud(plot)
             # 指标可声明需要向右延伸的bar数（如随机森林预测器的未来轨迹）
             extension = int(getattr(item, "preferred_x_extension", 0))
             if extension > 0:
@@ -363,7 +368,13 @@ class EnhancedChartWidget(ChartWidget):
                 self._update_x_range()
         else:
             if key in self._items:
-                self._plots["candle"].removeItem(self._items[key])
+                item = self._items[key]
+                self._plots["candle"].removeItem(item)
+                # HUD 是独立挂到 plot 的子项，需一并移除
+                hud_item = getattr(item, "hud_item", None)
+                if hud_item is not None:
+                    self._plots["candle"].removeItem(hud_item)
+                    item.hud_item = None
         
         self.main_indicator_visibility[name] = checked
         self.update()
