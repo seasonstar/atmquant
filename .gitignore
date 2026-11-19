@@ -218,7 +218,6 @@ local-tests/
 core/strategies/xgboost_mini_strategy.py
 scripts/batch_backtest_xgboost_mini.py
 scripts/render_bayesian_refactor_verification.py
-scripts/render_xgb_probability_verification.py
 tests/test_hud_auto_attach.py
 tests/test_xgboost_mini_calculator.py
 tests/test_xgboost_mini_strategy.py

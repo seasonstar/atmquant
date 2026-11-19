@@ -57,7 +57,6 @@ EXTENDED_INDICATORS_CONFIG = {
     "nqqe": {"module": "nqqe_item", "class": "NqqeItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
     "bayesian_q": {"module": "bayesian_q_item", "class": "BayesianQItem", "type": "sub", "default_visible": False, "min_height": 120, "max_height": 180, "configurable": True},
     "random_forest_forecast": {"module": "random_forest_forecast_item", "class": "RandomForestForecastItem", "type": "main", "default_visible": False, "configurable": True},
-    "xgb_probability": {"module": "xgb_probability_item", "class": "XGBProbabilityItem", "type": "sub", "default_visible": False, "min_height": 100, "max_height": 160, "configurable": True},
 }
 
 # 动态导入扩展指标
