@@ -95,8 +95,10 @@ Desktop.ini
 articles/
 CLAUDE.md
 
-# 扩展指标（需额外安装）
-# 默认忽略 core/indicators/ 下所有文件，只保留已追踪的基础指标
+# 扩展指标（会员专项代码，不进 git；需额外安装）
+# 默认忽略 core/indicators/ 下所有文件，仅白名单内的传统基础指标保留跟踪；
+# 高级指标（bayesian/random_forest/logistic_sr/xgb/smc/supertrend/wavetrend 等）
+# 为知识星球会员专享源码，本地保留、不提交。
 core/indicators/*
 !core/indicators/__init__.py
 !core/indicators/indicator_base.py
@@ -107,6 +109,19 @@ core/indicators/*
 !core/indicators/rsi_item.py
 !core/indicators/macd_item.py
 !core/indicators/dmi_item.py
+# 基础计算器目录：先放行目录，再忽略内容，最后白名单传统指标计算层
+!core/indicators/calculators/
+core/indicators/calculators/*
+!core/indicators/calculators/__init__.py
+!core/indicators/calculators/base.py
+!core/indicators/calculators/indicator_manager.py
+!core/indicators/calculators/boll_calculator.py
+!core/indicators/calculators/dmi_calculator.py
+!core/indicators/calculators/ema_calculator.py
+!core/indicators/calculators/macd_calculator.py
+!core/indicators/calculators/rsi_calculator.py
+!core/indicators/calculators/sma_calculator.py
+!core/indicators/calculators/volume_calculator.py
 
 # 付费功能模块（ATM Trader Pro 专属）
 vnpy_charttrader/
