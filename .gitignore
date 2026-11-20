@@ -222,3 +222,8 @@ tests/test_hud_auto_attach.py
 tests/test_xgboost_mini_calculator.py
 tests/test_xgboost_mini_strategy.py
 core/strategies/single_symbol_ai_strategy.py
+# Structural SVM Ranker 指标产物（2026-11-20，依赖会员 calculator/item）
+scripts/render_structural_svm.py
+scripts/qa_structural_svm_article.py
+tests/test_structural_svm_ranker_calculator.py
+tests/test_structural_svm_ranker_item.py
